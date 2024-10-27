@@ -10,36 +10,38 @@ import (
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
-type Client struct {
+type OpenAIClient struct {
 	logger *logrus.Logger
-	llm    llms.LLM
-	config *Config
+	llm    llms.Model
+	config *OpenAIConfig
 }
 
-func NewClient(config *Config) (*Client, error) {
+func NewOpenAIClient(config *OpenAIConfig) (*OpenAIClient, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	llm, err := openai.New()
+	llm, err := openai.New(
+		openai.WithToken(config.APIKey),
+		openai.WithModel(config.Model),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OpenAI: %w", err)
 	}
 
-	return &Client{
+	return &OpenAIClient{
 		logger: config.Logger,
 		llm:    llm,
 		config: config,
 	}, nil
 }
 
-func (c *Client) Generate(ctx context.Context, prompt string, opts ...llm.Option) (string, error) {
+func (c *OpenAIClient) Generate(ctx context.Context, prompt string, opts ...llm.Option) (string, error) {
 	options := &llm.Options{
-		Temperature: 0.7,
-		MaxTokens:   1000,
-		Model:       "gpt-4",
+		Temperature: c.config.Temperature,
+		MaxTokens:   c.config.MaxTokens,
+		Model:       c.config.Model,
 	}
-
 	for _, opt := range opts {
 		opt(options)
 	}
