@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/brendanplayford/agent-go/pkg/llm/openai"
+	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
 )
 

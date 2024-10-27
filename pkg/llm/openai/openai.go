@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendanplayford/agent-go/pkg/llm"
+	"github.com/lisanmuaddib/agent-go/pkg/llm"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"

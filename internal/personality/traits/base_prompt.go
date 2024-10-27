@@ -1,7 +1,7 @@
 package traits
 
 import (
-	prompts "github.com/brendanplayford/agent-go/pkg/prompts/templates"
+	prompts "github.com/lisanmuaddib/agent-go/pkg/prompts/templates"
 	langchainprompts "github.com/tmc/langchaingo/prompts"
 )
 
