@@ -15,7 +15,7 @@ type TwitterConfig struct {
 	ConsumerSecret    string
 	AccessToken       string
 	AccessTokenSecret string
-	BearerToken       string // Optional for read-only operations
+	BearerToken       string
 
 	// API Endpoints
 	BaseURL          string
@@ -91,8 +91,24 @@ func NewTwitterConfig() (*TwitterConfig, error) {
 			"entities.mentions.username",
 		},
 
-		Logger: logrus.New(),
+		Logger: func() *logrus.Logger {
+			log := logrus.New()
+			// Set log level from environment variable
+			if level := os.Getenv("LOG_LEVEL"); level != "" {
+				if parsedLevel, err := logrus.ParseLevel(level); err == nil {
+					log.SetLevel(parsedLevel)
+				}
+			}
+			return log
+		}(),
 	}
+
+	config.Logger.WithFields(logrus.Fields{
+		"consumer_key_exists": config.ConsumerKey != "",
+		"bearer_token_exists": config.BearerToken != "",
+		"base_url":            config.BaseURL,
+		"rate_limit":          config.RateLimit,
+	}).Debug("Twitter config initialized")
 
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -102,6 +118,8 @@ func NewTwitterConfig() (*TwitterConfig, error) {
 }
 
 func (c *TwitterConfig) Validate() error {
+	c.Logger.Debug("Validating Twitter configuration")
+
 	// Validate logger
 	if c.Logger == nil {
 		return fmt.Errorf("logger is required")
@@ -110,7 +128,12 @@ func (c *TwitterConfig) Validate() error {
 	// For write operations (tweets), validate OAuth 1.0a credentials
 	if c.ConsumerKey == "" || c.ConsumerSecret == "" ||
 		c.AccessToken == "" || c.AccessTokenSecret == "" {
-		c.Logger.Warn("OAuth 1.0a credentials not provided - write operations will not be available")
+		c.Logger.WithFields(logrus.Fields{
+			"consumer_key_exists":        c.ConsumerKey != "",
+			"consumer_secret_exists":     c.ConsumerSecret != "",
+			"access_token_exists":        c.AccessToken != "",
+			"access_token_secret_exists": c.AccessTokenSecret != "",
+		}).Debug("OAuth credentials validation")
 
 		// If no OAuth credentials, require bearer token for read-only operations
 		if c.BearerToken == "" {
@@ -137,6 +160,7 @@ func (c *TwitterConfig) Validate() error {
 		c.TweetEndpoint = "/tweets"
 	}
 
+	c.Logger.Debug("Twitter configuration validation completed successfully")
 	return nil
 }
 
@@ -150,13 +174,27 @@ func getEnvOrDefault(key, defaultValue string) string {
 
 // GetEndpoint returns the full URL for a given endpoint
 func (c *TwitterConfig) GetEndpoint(endpoint string) string {
-	return c.BaseURL + endpoint
+	fullURL := c.BaseURL + endpoint
+	c.Logger.WithFields(logrus.Fields{
+		"base_url": c.BaseURL,
+		"endpoint": endpoint,
+		"full_url": fullURL,
+	}).Debug("Constructed API endpoint")
+	return fullURL
 }
 
 // GetTweetFields returns the default tweet fields plus any additional fields
 func (c *TwitterConfig) GetTweetFields(additionalFields ...string) []string {
 	fields := append([]string{}, c.DefaultFields...)
-	return append(fields, additionalFields...)
+	fields = append(fields, additionalFields...)
+
+	c.Logger.WithFields(logrus.Fields{
+		"default_fields":    c.DefaultFields,
+		"additional_fields": additionalFields,
+		"final_fields":      fields,
+	}).Debug("Constructed tweet fields")
+
+	return fields
 }
 
 // GetExpansions returns the configured expansion fields

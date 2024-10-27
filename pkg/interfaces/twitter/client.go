@@ -19,6 +19,7 @@ type TwitterClient struct {
 	config *TwitterConfig
 	auth   *Authenticator
 	logger *logrus.Logger
+	log    *logrus.Logger
 }
 
 // NewTwitterClient creates a new Twitter API client
@@ -36,6 +37,7 @@ func NewTwitterClient(config *TwitterConfig, opts ...ClientOption) (*TwitterClie
 		config: config,
 		auth:   auth,
 		logger: config.Logger,
+		log:    logrus.New(),
 	}
 
 	for _, opt := range opts {
@@ -47,14 +49,24 @@ func NewTwitterClient(config *TwitterConfig, opts ...ClientOption) (*TwitterClie
 
 // handleResponse checks for API errors in the response
 func (c *TwitterClient) handleResponse(resp *http.Response) error {
+	// Log response headers and status
+	c.logger.WithFields(logrus.Fields{
+		"status_code": resp.StatusCode,
+		"headers":     resp.Header,
+	}).Debug("Received API response")
+
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.logger.WithError(err).Error("Failed to read error response body")
 		return fmt.Errorf("failed to read error response: %w", err)
 	}
+
+	// Log raw response body
+	c.logger.WithField("response_body", string(body)).Debug("Error response body")
 
 	var errResp struct {
 		Errors []struct {
@@ -81,6 +93,11 @@ func (c *TwitterClient) handleResponse(resp *http.Response) error {
 }
 
 func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
+	c.logger.WithFields(logrus.Fields{
+		"method":   method,
+		"endpoint": endpoint,
+	}).Debug("Preparing API request")
+
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
@@ -91,13 +108,19 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
+			c.logger.WithError(err).Error("Failed to marshal request body")
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(jsonBody)
-		c.logger.WithField("request_body", string(jsonBody)).Debug("Request payload")
+		c.logger.WithFields(logrus.Fields{
+			"request_body": string(jsonBody),
+			"content_type": "application/json",
+		}).Debug("Request payload")
 	}
 
 	fullURL := c.config.BaseURL + endpoint
+	c.logger.WithField("url", fullURL).Debug("Making request to Twitter API")
+
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -106,10 +129,22 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	// Log request headers
+	c.logger.WithFields(logrus.Fields{
+		"headers": req.Header,
+	}).Debug("Request headers")
+
 	// OAuth 1.0a client will handle the authentication headers
 	resp, err := c.auth.GetClient().Do(req)
 	if err != nil {
+		c.logger.WithError(err).Error("Request failed")
 		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	// Add error handling here
+	if err := c.handleResponse(resp); err != nil {
+		resp.Body.Close()
+		return nil, err
 	}
 
 	return resp, nil
