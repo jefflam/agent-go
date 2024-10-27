@@ -48,13 +48,16 @@ func (c *OpenAIConfig) Validate() error {
 	if c.Logger == nil {
 		return fmt.Errorf("logger is required")
 	}
+
+	// Validate ranges for parameters
+	if c.Temperature < 0 || c.Temperature > 1 {
+		return fmt.Errorf("temperature must be between 0 and 1")
+	}
+	if c.MaxTokens < 1 {
+		return fmt.Errorf("maxTokens must be positive")
+	}
+
 	// Set default values if not provided
-	if c.Temperature == 0 {
-		c.Temperature = 0.7
-	}
-	if c.MaxTokens == 0 {
-		c.MaxTokens = 1000
-	}
 	if c.Model == "" {
 		c.Model = "gpt-4"
 	}

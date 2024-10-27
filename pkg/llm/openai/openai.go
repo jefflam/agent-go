@@ -37,13 +37,24 @@ func NewOpenAIClient(config *OpenAIConfig) (*OpenAIClient, error) {
 }
 
 func (c *OpenAIClient) Generate(ctx context.Context, prompt string, opts ...llm.Option) (string, error) {
+	// Apply default options first
 	options := &llm.Options{
 		Temperature: c.config.Temperature,
 		MaxTokens:   c.config.MaxTokens,
 		Model:       c.config.Model,
 	}
+
+	// Apply user-provided options
 	for _, opt := range opts {
 		opt(options)
+	}
+
+	// Validate options after all modifications
+	if options.Temperature < 0 || options.Temperature > 1 {
+		return "", fmt.Errorf("temperature must be between 0 and 1, got: %f", options.Temperature)
+	}
+	if options.MaxTokens < 1 {
+		return "", fmt.Errorf("maxTokens must be positive, got: %d", options.MaxTokens)
 	}
 
 	c.logger.WithFields(logrus.Fields{

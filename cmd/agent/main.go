@@ -6,19 +6,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/brendanplayford/agent-go/pkg/thoughts"
+	"github.com/brendanplayford/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
 )
 
 var (
 	log = logrus.New()
 )
-
-// ThoughtProcessor handles the creation and processing of thoughts
-type ThoughtProcessor interface {
-	Process(ctx context.Context, input string) (*thoughts.Thought, error)
-	Shutdown() error
-}
 
 // Config holds the application configuration
 type Config struct {
@@ -48,13 +42,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize thought processor
-	processor, err := thoughts.NewProcessor(thoughts.Config{
-		Logger: log,
-		// Add other configuration options
-	})
+	// Initialize OpenAI client
+	config, err := openai.NewOpenAIConfig()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to initialize thought processor")
+		log.WithError(err).Fatal("Failed to create OpenAI config")
+	}
+	config.Logger = log
+
+	client, err := openai.NewOpenAIClient(config)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create OpenAI client")
 	}
 
 	// Handle graceful shutdown
@@ -66,9 +63,6 @@ func main() {
 		log.WithFields(logrus.Fields{
 			"signal": sig.String(),
 		}).Info("Received shutdown signal")
-		if err := processor.Shutdown(); err != nil {
-			log.WithError(err).Error("Error during thought processor shutdown")
-		}
 		cancel()
 	}()
 
@@ -77,15 +71,16 @@ func main() {
 		"version": "0.1.0",
 	}).Info("Starting Twitter Agent")
 
-	// Example thought processing
-	thought, err := processor.Process(ctx, "What should I tweet about today?")
+	// Example LLM interaction
+	prompt := "What's an interesting topic to tweet about regarding artificial intelligence?"
+	response, err := client.Generate(ctx, prompt)
 	if err != nil {
-		log.WithError(err).Error("Failed to process thought")
+		log.WithError(err).Error("Failed to generate response")
 	} else {
 		log.WithFields(logrus.Fields{
-			"thoughtID": thought.ID,
-			"content":   thought.Content,
-		}).Info("Thought processed successfully")
+			"prompt":   prompt,
+			"response": response,
+		}).Info("Generated response successfully")
 	}
 
 	<-ctx.Done()
