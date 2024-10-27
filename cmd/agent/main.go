@@ -6,12 +6,25 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/brendanplayford/agent-go/pkg/thoughts"
 	"github.com/sirupsen/logrus"
 )
 
 var (
 	log = logrus.New()
 )
+
+// ThoughtProcessor handles the creation and processing of thoughts
+type ThoughtProcessor interface {
+	Process(ctx context.Context, input string) (*thoughts.Thought, error)
+	Shutdown() error
+}
+
+// Config holds the application configuration
+type Config struct {
+	LogLevel string
+	// Add other config options as needed
+}
 
 func init() {
 	// Initialize logger
@@ -35,6 +48,15 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize thought processor
+	processor, err := thoughts.NewProcessor(thoughts.Config{
+		Logger: log,
+		// Add other configuration options
+	})
+	if err != nil {
+		log.WithError(err).Fatal("Failed to initialize thought processor")
+	}
+
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -44,6 +66,9 @@ func main() {
 		log.WithFields(logrus.Fields{
 			"signal": sig.String(),
 		}).Info("Received shutdown signal")
+		if err := processor.Shutdown(); err != nil {
+			log.WithError(err).Error("Error during thought processor shutdown")
+		}
 		cancel()
 	}()
 
@@ -52,7 +77,17 @@ func main() {
 		"version": "0.1.0",
 	}).Info("Starting Twitter Agent")
 
-	// TODO: Initialize and start agent components
+	// Example thought processing
+	thought, err := processor.Process(ctx, "What should I tweet about today?")
+	if err != nil {
+		log.WithError(err).Error("Failed to process thought")
+	} else {
+		log.WithFields(logrus.Fields{
+			"thoughtID": thought.ID,
+			"content":   thought.Content,
+		}).Info("Thought processed successfully")
+	}
+
 	<-ctx.Done()
 	log.Info("Shutting down gracefully...")
 }
