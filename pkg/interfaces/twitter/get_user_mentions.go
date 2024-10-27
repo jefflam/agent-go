@@ -85,11 +85,15 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 		defer close(dataChan)
 		defer close(errChan)
 
-		// Use authenticated user's ID if UserID is not provided
 		userID := params.UserID
 		if userID == "" {
-			// Use "me" as a special identifier for the authenticated user
-			userID = "me"
+			// Get actual user ID instead of using "me"
+			var err error
+			userID, err = c.GetAuthenticatedUserID(ctx)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to get authenticated user ID: %w", err)
+				return
+			}
 		}
 
 		log := c.logger.WithFields(logrus.Fields{
@@ -97,7 +101,7 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 			"userID": userID,
 		})
 
-		endpoint := fmt.Sprintf("%s/users/%s/mentions", c.config.BaseURL, userID)
+		endpoint := fmt.Sprintf("/users/%s/mentions", userID)
 
 		for {
 			select {
@@ -148,4 +152,24 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 	}()
 
 	return dataChan, errChan
+}
+
+// Add a method to get authenticated user's ID
+func (c *TwitterClient) GetAuthenticatedUserID(ctx context.Context) (string, error) {
+	endpoint := "/users/me"
+	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var userResp struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
+		return "", err
+	}
+	return userResp.Data.ID, nil
 }

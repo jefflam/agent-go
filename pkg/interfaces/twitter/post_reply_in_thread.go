@@ -32,8 +32,8 @@ func (c *TwitterClient) PostReplyThread(ctx context.Context, params PostReplyThr
 
 		select {
 		case resp := <-tweetChan:
-			if resp != nil && resp.Data != nil {
-				params.ConversationID = resp.Data.ConversationID
+			if resp != nil && resp.Data != nil && len(resp.Data) > 0 {
+				params.ConversationID = resp.Data[0].ConversationID
 			}
 		case err := <-errChan:
 			log.WithError(err).Error("failed to fetch original tweet")

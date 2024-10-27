@@ -8,6 +8,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
 	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.9.0
 	github.com/tmc/langchaingo v0.1.12
 )
 
@@ -15,6 +16,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -34,6 +36,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect

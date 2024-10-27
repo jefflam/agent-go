@@ -6,83 +6,72 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/lisanmuaddib/agent-go/pkg/agent"
+	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	log = logrus.New()
-)
-
-// Config holds the application configuration
-type Config struct {
-	LogLevel string
-	// Add other config options as needed
-}
-
-func init() {
-	// Initialize logger
-	log.SetFormatter(&logrus.JSONFormatter{})
-
-	// Set log level from environment variable
-	logLevel := os.Getenv("LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "INFO"
-	}
-
-	level, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		log.SetLevel(logrus.InfoLevel)
-	} else {
-		log.SetLevel(level)
-	}
-}
-
 func main() {
+	// Initialize logger
+	log := logrus.New()
+	log.SetFormatter(&logrus.JSONFormatter{})
+	log.SetLevel(logrus.InfoLevel)
+
+	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Initialize OpenAI client
-	config, err := openai.NewOpenAIConfig()
+	openaiConfig, err := openai.NewOpenAIConfig()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create OpenAI config")
 	}
-	config.Logger = log
 
-	client, err := openai.NewOpenAIClient(config)
+	llmClient, err := openai.NewOpenAIClient(openaiConfig)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create OpenAI client")
 	}
 
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Initialize Twitter config using the provided function
+	twitterConfig, err := twitter.NewTwitterConfig()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create Twitter config")
+	}
+	// Override logger to use our main logger
+	twitterConfig.Logger = log
 
+	// Initialize Twitter client with config
+	twitterClient, err := twitter.NewTwitterClient(twitterConfig)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create Twitter client")
+	}
+
+	// Initialize agent
+	agent, err := agent.New(agent.Config{
+		LLM:           llmClient.GetLLM(),
+		TwitterClient: twitterClient,
+		Logger:        log,
+	})
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create agent")
+	}
+
+	// Handle graceful shutdown
 	go func() {
-		sig := <-sigChan
-		log.WithFields(logrus.Fields{
-			"signal": sig.String(),
-		}).Info("Received shutdown signal")
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		log.Info("Received shutdown signal")
 		cancel()
 	}()
 
-	log.WithFields(logrus.Fields{
-		"service": "twitter-agent",
-		"version": "0.1.0",
-	}).Info("Starting Twitter Agent")
+	log.Info("Starting Twitter mention monitoring")
 
-	// Example LLM interaction
-	prompt := "What's an interesting topic to tweet about regarding artificial intelligence?"
-	response, err := client.Generate(ctx, prompt)
-	if err != nil {
-		log.WithError(err).Error("Failed to generate response")
-	} else {
-		log.WithFields(logrus.Fields{
-			"prompt":   prompt,
-			"response": response,
-		}).Info("Generated response successfully")
+	// Run the agent
+	if err := agent.Run(ctx); err != nil && err != context.Canceled {
+		log.WithError(err).Fatal("Agent stopped with error")
 	}
 
-	<-ctx.Done()
-	log.Info("Shutting down gracefully...")
+	log.Info("Agent shutdown complete")
 }

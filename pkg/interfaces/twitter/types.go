@@ -122,7 +122,7 @@ type Tweet struct {
 
 // TweetResponse represents the Twitter API response format
 type TweetResponse struct {
-	Data     *Tweet         `json:"data"`
+	Data     []Tweet        `json:"data"` // Changed from *Tweet to []Tweet
 	Includes *TweetIncludes `json:"includes,omitempty"`
 	Errors   []TwitterError `json:"errors,omitempty"`
 	Meta     *Meta          `json:"meta,omitempty"`

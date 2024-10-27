@@ -1,4 +1,4 @@
-package twitter_test
+package integration
 
 import (
 	"testing"

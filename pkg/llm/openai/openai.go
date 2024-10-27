@@ -16,6 +16,11 @@ type OpenAIClient struct {
 	config *OpenAIConfig
 }
 
+// GetLLM returns the underlying LangChain LLM model
+func (c *OpenAIClient) GetLLM() llms.Model {
+	return c.llm
+}
+
 func NewOpenAIClient(config *OpenAIConfig) (*OpenAIClient, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)

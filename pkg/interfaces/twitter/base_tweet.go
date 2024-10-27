@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/sirupsen/logrus"
@@ -123,5 +124,9 @@ func (c *TwitterClient) postTweetHelper(ctx context.Context, endpoint string, re
 		return nil, err
 	}
 
-	return tweetResponse.Data, nil
+	if len(tweetResponse.Data) == 0 {
+		return nil, fmt.Errorf("no tweet data returned in response")
+	}
+
+	return &tweetResponse.Data[0], nil
 }
