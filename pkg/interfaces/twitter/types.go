@@ -380,3 +380,11 @@ type ListMembersResponse struct {
 	Meta     *Meta          `json:"meta,omitempty"`
 	Error    *TwitterError  `json:"error,omitempty"`
 }
+
+// ConversationResponse represents the response from the conversation lookup endpoint
+type ConversationResponse struct {
+	Data     []Tweet        `json:"data"`
+	Includes *TweetIncludes `json:"includes,omitempty"`
+	Errors   []TwitterError `json:"errors,omitempty"`
+	Meta     *Meta          `json:"meta,omitempty"`
+}
