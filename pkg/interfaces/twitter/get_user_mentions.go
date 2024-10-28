@@ -1,22 +1,4 @@
 // Package twitter provides a client for interacting with the Twitter API v2.
-// It handles authentication, rate limiting, pagination and provides strongly typed
-// responses for various Twitter endpoints.
-//
-// The package implements Twitter's best practices for:
-// - Authentication: Supports both App-only and User authentication flows
-// - Rate Limiting: Built-in rate limit handling and backoff strategies
-// - Pagination: Cursor-based pagination via NextToken for efficient data retrieval
-// - Error Handling: Structured error types with detailed error information
-// - Response Types: Strongly typed response objects for type safety
-//
-// Rate Limits:
-// - User Mentions: 450 requests/15min (app auth), 180 requests/15min (user auth)
-// - User Tweets: 1500 requests/15min (app auth), 900 requests/15min (user auth)
-// - User Lookup: 300 requests/15min (app auth), 900 requests/15min (user auth)
-// - Tweet Lookup: 300 requests/15min (app auth), 900 requests/15min (user auth)
-//
-// The client automatically handles pagination and provides channels for streaming
-// responses, making it easy to process large datasets efficiently.
 package twitter
 
 import (
@@ -43,9 +25,15 @@ type GetUserMentionsParams struct {
 	MaxResults int
 }
 
+// MentionResponse wraps TweetResponse with conversation tracking
+type MentionResponse struct {
+	Tweet          *TweetResponse
+	ConversationID string
+}
+
 // GetUserMentions retrieves tweets mentioning a specific user.
 // It returns two channels:
-// - A channel that streams TweetResponse objects containing the mention data
+// - A channel that streams MentionResponse objects containing the mention data and conversation ID
 // - An error channel for any errors encountered during processing
 //
 // The endpoint uses cursor-based pagination via NextToken to retrieve all results.
@@ -58,27 +46,8 @@ type GetUserMentionsParams struct {
 // Rate Limits:
 // - App-only auth: 450 requests per 15-minute window
 // - User auth: 180 requests per 15-minute window
-//
-// Example usage:
-//
-//	params := GetUserMentionsParams{
-//	    MaxResults: 100,
-//	}
-//	dataChan, errChan := client.GetUserMentions(ctx, params)
-//	for {
-//	    select {
-//	    case resp, ok := <-dataChan:
-//	        if !ok {
-//	            return // Channel closed
-//	        }
-//	        // Process tweets
-//	    case err := <-errChan:
-//	        log.Error(err)
-//	        return
-//	    }
-//	}
-func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMentionsParams) (chan *TweetResponse, chan error) {
-	dataChan := make(chan *TweetResponse)
+func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMentionsParams) (chan *MentionResponse, chan error) {
+	dataChan := make(chan *MentionResponse)
 	errChan := make(chan error)
 
 	go func() {
@@ -117,11 +86,13 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 						"conversation_id",
 						"in_reply_to_user_id",
 						"referenced_tweets",
+						"author_id",
 					), ","),
 					"expansions": strings.Join(append(
 						c.config.GetExpansions(),
 						"referenced_tweets.id",
 						"in_reply_to_user_id",
+						"author_id",
 					), ","),
 				}
 
@@ -140,7 +111,30 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 					return
 				}
 
-				dataChan <- &tweetResp
+				// Create MentionResponse with conversation ID
+				mentionResp := &MentionResponse{
+					Tweet: &tweetResp,
+				}
+
+				// Extract conversation ID from the first tweet if available
+				if len(tweetResp.Data) > 0 {
+					tweet := tweetResp.Data[0]
+
+					// If conversation_id is empty, use the tweet's ID as the conversation starter
+					if tweet.ConversationID == "" {
+						mentionResp.ConversationID = tweet.ID
+					} else {
+						mentionResp.ConversationID = tweet.ConversationID
+					}
+
+					c.logger.WithFields(logrus.Fields{
+						"tweet_id":            tweet.ID,
+						"conversation_id":     mentionResp.ConversationID,
+						"is_new_conversation": tweet.ConversationID == "",
+					}).Debug("Processing tweet conversation")
+				}
+
+				dataChan <- mentionResp
 
 				if tweetResp.Meta.NextToken == "" {
 					return
@@ -154,7 +148,7 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 	return dataChan, errChan
 }
 
-// Add a method to get authenticated user's ID
+// GetAuthenticatedUserID retrieves the authenticated user's ID
 func (c *TwitterClient) GetAuthenticatedUserID(ctx context.Context) (string, error) {
 	endpoint := "/users/me"
 	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)

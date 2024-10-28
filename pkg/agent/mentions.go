@@ -49,7 +49,9 @@ func (mp *MentionProcessor) ProcessMentions(ctx context.Context) error {
 		if !ok {
 			return nil // Channel closed, no data
 		}
-		mp.processTweetResponse(ctx, resp)
+		if resp.Tweet != nil {
+			mp.processTweetResponse(ctx, resp.Tweet)
+		}
 	}
 
 	return nil

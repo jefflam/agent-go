@@ -75,7 +75,7 @@ func (a *Agent) checkMentions(ctx context.Context) error {
 		if !ok {
 			return nil
 		}
-		return a.processMentions(ctx, resp)
+		return a.processMentions(ctx, resp.Tweet)
 	}
 }
 
@@ -90,9 +90,10 @@ func (a *Agent) processMentions(ctx context.Context, resp *twitter.TweetResponse
 			return ctx.Err()
 		default:
 			a.logger.WithFields(logrus.Fields{
-				"tweet_id": tweet.ID,
-				"author":   tweet.AuthorID,
-				"text":     tweet.Text,
+				"tweet_id":        tweet.ID,
+				"author":          tweet.AuthorID,
+				"text":            tweet.Text,
+				"conversation_id": tweet.ConversationID,
 			}).Info("Processing mention")
 
 			// TODO: Add your tweet processing logic here

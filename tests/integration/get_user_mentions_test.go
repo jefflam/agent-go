@@ -8,8 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
-	"github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/ginkgo/v2" // Only import v2
 	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
 )
@@ -97,12 +96,13 @@ var _ = Describe("GetUserMentions", func() {
 						continue
 					}
 					receivedData = true
-					if resp != nil {
-						Expect(resp.Meta).NotTo(BeNil())
-						if len(resp.Data) > 0 {
-							Expect(resp.Data[0].ID).NotTo(BeEmpty())
-							Expect(resp.Data[0].Text).NotTo(BeEmpty())
-							ginkgo.GinkgoWriter.Printf("Received mention: %s\n", resp.Data[0].Text)
+					if resp != nil && resp.Tweet != nil {
+						Expect(resp.Tweet.Meta).NotTo(BeNil())
+						if len(resp.Tweet.Data) > 0 {
+							Expect(resp.Tweet.Data[0].ID).NotTo(BeEmpty())
+							Expect(resp.Tweet.Data[0].Text).NotTo(BeEmpty())
+							GinkgoWriter.Printf("Received mention: %s\n", resp.Tweet.Data[0].Text)
+							GinkgoWriter.Printf("Conversation ID: %s\n", resp.ConversationID)
 						}
 					}
 				case err, ok := <-errChan:
@@ -179,11 +179,11 @@ var _ = Describe("GetUserMentions", func() {
 						continue
 					}
 					receivedData = true
-					if resp != nil {
-						Expect(resp.Meta).NotTo(BeNil())
-						if len(resp.Data) > 0 {
-							Expect(resp.Data[0].ID).NotTo(BeEmpty())
-							Expect(resp.Data[0].Text).NotTo(BeEmpty())
+					if resp != nil && resp.Tweet != nil {
+						Expect(resp.Tweet.Meta).NotTo(BeNil())
+						if len(resp.Tweet.Data) > 0 {
+							Expect(resp.Tweet.Data[0].ID).NotTo(BeEmpty())
+							Expect(resp.Tweet.Data[0].Text).NotTo(BeEmpty())
 						}
 					}
 				case err, ok := <-errChan:
