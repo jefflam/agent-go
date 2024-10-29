@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultInterval = 30 * time.Second
+	defaultCheckMentionsInterval = 30 * time.Second
 )
 
 // New creates a new Agent instance
@@ -24,30 +24,31 @@ func New(config Config) (*Agent, error) {
 	if config.Logger == nil {
 		config.Logger = logrus.New()
 	}
-	if config.Interval == 0 {
-		config.Interval = defaultInterval
+	if config.CheckMentions.Interval == 0 {
+		config.CheckMentions.Interval = defaultCheckMentionsInterval
 	}
 
+	config.CheckMentions.ticker = time.NewTicker(config.CheckMentions.Interval)
+
 	return &Agent{
-		client:   config.TwitterClient,
-		llm:      config.LLM,
-		logger:   config.Logger,
-		interval: config.Interval,
-		ticker:   time.NewTicker(config.Interval),
+		client:         config.TwitterClient,
+		llm:            config.LLM,
+		logger:         config.Logger,
+		mentionsConfig: config.CheckMentions,
 	}, nil
 }
 
 // Run starts the agent's mention checking loop
 func (a *Agent) Run(ctx context.Context) error {
-	log := a.logger.WithField("interval", a.interval)
+	log := a.logger.WithField("interval", a.mentionsConfig.Interval)
 	log.Info("Starting mention monitoring")
 
 	for {
 		select {
 		case <-ctx.Done():
-			a.ticker.Stop()
+			a.mentionsConfig.ticker.Stop()
 			return ctx.Err()
-		case <-a.ticker.C:
+		case <-a.mentionsConfig.ticker.C:
 			if err := a.checkMentions(ctx); err != nil {
 				log.WithError(err).Error("Failed to check mentions")
 				// Continue running despite errors
