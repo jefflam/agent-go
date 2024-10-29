@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	agent "github.com/lisanmuaddib/agent-go/pkg"
+	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
@@ -55,6 +57,20 @@ func main() {
 	})
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create agent")
+	}
+
+	mentionsAction := actions.NewMentionsHandler(
+		twitterClient,
+		llmClient.GetLLM(),
+		log,
+		actions.MentionsOptions{
+			Interval:   30 * time.Second,
+			MaxResults: 100,
+		},
+	)
+
+	if err := agent.RegisterAction(mentionsAction); err != nil {
+		log.WithError(err).Fatal("Failed to register mentions action")
 	}
 
 	// Handle graceful shutdown

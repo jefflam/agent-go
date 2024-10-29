@@ -3,38 +3,28 @@ package agent
 import (
 	"context"
 	"fmt"
-	"time"
+	"sync"
 
+	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
 )
 
-const (
-	defaultCheckMentionsInterval = 30 * time.Second
-)
-
-// Add type definitions at the top of the file
-type CheckMentionsConfig struct {
-	Interval time.Duration
-	ticker   *time.Ticker
-}
-
 type Agent struct {
-	client         *twitter.TwitterClient
-	llm            llms.Model
-	logger         *logrus.Logger
-	mentionsConfig CheckMentionsConfig
+	client  *twitter.TwitterClient
+	llm     llms.Model
+	logger  *logrus.Logger
+	actions map[string]actions.Action
+	mu      sync.RWMutex
 }
 
 type Config struct {
 	LLM           llms.Model
 	Logger        *logrus.Logger
 	TwitterClient *twitter.TwitterClient
-	CheckMentions CheckMentionsConfig
 }
 
-// New creates a new Agent instance
 func New(config Config) (*Agent, error) {
 	if config.LLM == nil {
 		return nil, fmt.Errorf("LLM is required")
@@ -45,84 +35,71 @@ func New(config Config) (*Agent, error) {
 	if config.Logger == nil {
 		config.Logger = logrus.New()
 	}
-	if config.CheckMentions.Interval == 0 {
-		config.CheckMentions.Interval = defaultCheckMentionsInterval
-	}
-
-	config.CheckMentions.ticker = time.NewTicker(config.CheckMentions.Interval)
 
 	return &Agent{
-		client:         config.TwitterClient,
-		llm:            config.LLM,
-		logger:         config.Logger,
-		mentionsConfig: config.CheckMentions,
+		client:  config.TwitterClient,
+		llm:     config.LLM,
+		logger:  config.Logger,
+		actions: make(map[string]actions.Action),
 	}, nil
 }
 
-// Run starts the agent's mention checking loop
-func (a *Agent) Run(ctx context.Context) error {
-	log := a.logger.WithField("interval", a.mentionsConfig.Interval)
-	log.Info("Starting mention monitoring")
+// RegisterAction adds a new action to the agent
+func (a *Agent) RegisterAction(action actions.Action) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-	for {
-		select {
-		case <-ctx.Done():
-			a.mentionsConfig.ticker.Stop()
-			return ctx.Err()
-		case <-a.mentionsConfig.ticker.C:
-			if err := a.checkMentions(ctx); err != nil {
-				log.WithError(err).Error("Failed to check mentions")
-				// Continue running despite errors
-			}
-		}
+	name := action.Name()
+	if _, exists := a.actions[name]; exists {
+		return fmt.Errorf("action %s already registered", name)
 	}
+
+	a.actions[name] = action
+	return nil
 }
 
-func (a *Agent) checkMentions(ctx context.Context) error {
-	log := a.logger.WithField("method", "checkMentions")
-	log.Debug("Checking for new mentions")
+// Run starts all registered actions
+func (a *Agent) Run(ctx context.Context) error {
+	a.logger.Info("Starting agent with registered actions")
 
-	params := twitter.GetUserMentionsParams{
-		MaxResults: 100,
+	// Create error channel for collecting errors from actions
+	errChan := make(chan error, len(a.actions))
+
+	// Start each action in its own goroutine
+	var wg sync.WaitGroup
+	for name, action := range a.actions {
+		wg.Add(1)
+		go func(name string, action actions.Action) {
+			defer wg.Done()
+
+			a.logger.WithField("action", name).Info("Starting action")
+			if err := action.Execute(ctx); err != nil {
+				a.logger.WithError(err).WithField("action", name).Error("Action failed")
+				errChan <- fmt.Errorf("action %s failed: %w", name, err)
+			}
+		}(name, action)
 	}
 
-	dataChan, errChan := a.client.GetUserMentions(ctx, params)
-
+	// Wait for context cancellation or errors
 	select {
 	case <-ctx.Done():
+		a.logger.Info("Context cancelled, stopping all actions")
+		a.stopAllActions()
 		return ctx.Err()
 	case err := <-errChan:
+		a.logger.WithError(err).Error("Action error occurred")
+		a.stopAllActions()
 		return err
-	case resp, ok := <-dataChan:
-		if !ok {
-			return nil
-		}
-		return a.processMentions(ctx, resp.Tweet)
 	}
 }
 
-func (a *Agent) processMentions(ctx context.Context, resp *twitter.TweetResponse) error {
-	if resp == nil || len(resp.Data) == 0 {
-		return nil
-	}
+// stopAllActions cleanly stops all registered actions
+func (a *Agent) stopAllActions() {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 
-	for _, tweet := range resp.Data {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			a.logger.WithFields(logrus.Fields{
-				"tweet_id":        tweet.ID,
-				"author":          tweet.AuthorID,
-				"text":            tweet.Text,
-				"conversation_id": tweet.ConversationID,
-			}).Info("Processing mention")
-
-			// TODO: Add your tweet processing logic here
-			// 1. Analyze tweet content using LLM
-			// 2. Generate response
-			// 3. Post reply
-		}
+	for name, action := range a.actions {
+		a.logger.WithField("action", name).Info("Stopping action")
+		action.Stop()
 	}
-	return nil
 }
