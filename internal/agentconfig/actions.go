@@ -23,7 +23,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.LLM,
 		config.Logger,
 		actions.MentionsOptions{
-			Interval:   30 * time.Second,
+			Interval:   5 * time.Minute,
 			MaxResults: 100,
 		},
 	)
@@ -33,7 +33,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.TwitterClient,
 		config.Logger,
 		actions.ThoughtOptions{
-			Interval: 30 * time.Second,
+			Interval: 30 * time.Minute,
 		},
 	)
 
