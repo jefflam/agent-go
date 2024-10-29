@@ -7,11 +7,32 @@ import (
 
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/sirupsen/logrus"
+	"github.com/tmc/langchaingo/llms"
 )
 
 const (
 	defaultCheckMentionsInterval = 30 * time.Second
 )
+
+// Add type definitions at the top of the file
+type CheckMentionsConfig struct {
+	Interval time.Duration
+	ticker   *time.Ticker
+}
+
+type Agent struct {
+	client         *twitter.TwitterClient
+	llm            llms.Model
+	logger         *logrus.Logger
+	mentionsConfig CheckMentionsConfig
+}
+
+type Config struct {
+	LLM           llms.Model
+	Logger        *logrus.Logger
+	TwitterClient *twitter.TwitterClient
+	CheckMentions CheckMentionsConfig
+}
 
 // New creates a new Agent instance
 func New(config Config) (*Agent, error) {
