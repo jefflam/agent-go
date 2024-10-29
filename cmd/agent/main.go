@@ -5,10 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/lisanmuaddib/agent-go/internal/agentconfig"
 	agent "github.com/lisanmuaddib/agent-go/pkg"
-	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
@@ -59,18 +58,19 @@ func main() {
 		log.WithError(err).Fatal("Failed to create agent")
 	}
 
-	mentionsAction := actions.NewMentionsHandler(
-		twitterClient,
-		llmClient.GetLLM(),
-		log,
-		actions.MentionsOptions{
-			Interval:   30 * time.Second,
-			MaxResults: 100,
-		},
-	)
+	actions, err := agentconfig.ConfigureActions(agentconfig.ActionConfig{
+		TwitterClient: twitterClient,
+		LLM:           llmClient.GetLLM(),
+		Logger:        log,
+	})
+	if err != nil {
+		log.WithError(err).Fatal("Failed to configure actions")
+	}
 
-	if err := agent.RegisterAction(mentionsAction); err != nil {
-		log.WithError(err).Fatal("Failed to register mentions action")
+	for _, action := range actions {
+		if err := agent.RegisterAction(action); err != nil {
+			log.WithError(err).Fatal("Failed to register action")
+		}
 	}
 
 	// Handle graceful shutdown
