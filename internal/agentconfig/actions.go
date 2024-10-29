@@ -5,6 +5,7 @@ import (
 
 	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
+	"github.com/lisanmuaddib/agent-go/pkg/thoughts"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -27,5 +28,15 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		},
 	)
 
-	return []actions.Action{mentionsAction}, nil
+	thoughtAction := actions.NewOriginalThoughtAction(
+		thoughts.NewOriginalThoughtGenerator(config.LLM),
+		config.TwitterClient,
+		30*time.Second,
+		config.Logger,
+	)
+
+	return []actions.Action{
+		mentionsAction,
+		thoughtAction,
+	}, nil
 }

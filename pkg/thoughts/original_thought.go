@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lisanmuaddib/agent-go/pkg/llm"
+	"github.com/tmc/langchaingo/llms"
 	langchainprompts "github.com/tmc/langchaingo/prompts"
 )
 
@@ -23,11 +23,11 @@ type OriginalThoughtGenerator interface {
 
 // DefaultOriginalThoughtGenerator implements the OriginalThoughtGenerator interface
 type DefaultOriginalThoughtGenerator struct {
-	llm llm.LLM
+	llm llms.Model
 }
 
 // NewOriginalThoughtGenerator creates a new thought generator instance
-func NewOriginalThoughtGenerator(llm llm.LLM) OriginalThoughtGenerator {
+func NewOriginalThoughtGenerator(llm llms.Model) OriginalThoughtGenerator {
 	return &DefaultOriginalThoughtGenerator{
 		llm: llm,
 	}
@@ -66,10 +66,10 @@ Generated thought:`,
 		return "", fmt.Errorf("error formatting thought prompt: %w", err)
 	}
 
-	// Generate the thought using the LLM
-	thought, err := g.llm.Generate(ctx, formattedPrompt,
-		llm.WithTemperature(config.Temperature),
-		llm.WithMaxTokens(config.MaxLength),
+	// Generate the thought using LangChain's Model interface
+	thought, err := g.llm.Call(ctx, formattedPrompt,
+		llms.WithTemperature(config.Temperature),
+		llms.WithMaxTokens(config.MaxLength),
 	)
 	if err != nil {
 		return "", fmt.Errorf("error generating thought: %w", err)
