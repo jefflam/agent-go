@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/lisanmuaddib/agent-go/pkg/agent"
+	agent "github.com/lisanmuaddib/agent-go/pkg"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/sirupsen/logrus"
