@@ -111,14 +111,20 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 					return
 				}
 
+				tweets, err := tweetResp.UnmarshalTweets()
+				if err != nil {
+					errChan <- fmt.Errorf("failed to unmarshal tweets: %w", err)
+					return
+				}
+
 				// Create MentionResponse with conversation ID
 				mentionResp := &MentionResponse{
 					Tweet: &tweetResp,
 				}
 
 				// Extract conversation ID from the first tweet if available
-				if len(tweetResp.Data) > 0 {
-					tweet := tweetResp.Data[0]
+				if len(tweets) > 0 {
+					tweet := tweets[0]
 
 					// If conversation_id is empty, use the tweet's ID as the conversation starter
 					if tweet.ConversationID == "" {

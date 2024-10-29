@@ -1,6 +1,9 @@
 package twitter
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Tweet represents a Twitter post with all v2 API fields
 type Tweet struct {
@@ -121,11 +124,31 @@ type Tweet struct {
 }
 
 // TweetResponse represents the Twitter API response format
+// It can handle both single Tweet and array responses
 type TweetResponse struct {
-	Data     []Tweet        `json:"data"`
-	Includes *TweetIncludes `json:"includes,omitempty"`
-	Errors   []TwitterError `json:"errors,omitempty"`
-	Meta     *Meta          `json:"meta,omitempty"`
+	// Data can be either a single Tweet or an array of Tweets
+	Data     json.RawMessage `json:"data"`
+	Includes *TweetIncludes  `json:"includes,omitempty"`
+	Errors   []TwitterError  `json:"errors,omitempty"`
+	Meta     *Meta           `json:"meta,omitempty"`
+}
+
+// UnmarshalTweet handles unmarshaling a single Tweet response
+func (tr *TweetResponse) UnmarshalTweet() (*Tweet, error) {
+	var tweet Tweet
+	if err := json.Unmarshal(tr.Data, &tweet); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal single tweet: %w", err)
+	}
+	return &tweet, nil
+}
+
+// UnmarshalTweets handles unmarshaling an array of Tweets response
+func (tr *TweetResponse) UnmarshalTweets() ([]Tweet, error) {
+	var tweets []Tweet
+	if err := json.Unmarshal(tr.Data, &tweets); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal tweet array: %w", err)
+	}
+	return tweets, nil
 }
 
 // TweetIncludes contains the expanded objects in the response

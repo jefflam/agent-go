@@ -2,6 +2,9 @@ package twitter
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 
 	"github.com/sirupsen/logrus"
 )
@@ -60,29 +63,31 @@ func (c *TwitterClient) PostTweetAsync(ctx context.Context, text string, opts *T
 }
 
 func (c *TwitterClient) PostTweet(ctx context.Context, text string, opts *TweetOptions) (*Tweet, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	request := CreateTweetRequest{
+		BaseTweetRequest: buildBaseRequest(text, opts),
 	}
 
-	tweets, errs := c.PostTweetAsync(ctx, text, opts)
-
-	select {
-	case tweet := <-tweets:
-		logrus.WithFields(logrus.Fields{
-			"tweet_id":      tweet.ID,
-			"text":          tweet.Text,
-			"created_at":    tweet.CreatedAt,
-			"author_id":     tweet.AuthorID,
-			"full_response": tweet,
-		}).Debug("tweet posted successfully")
-		return tweet, nil
-	case err := <-errs:
-		return nil, err
-	case <-ctx.Done():
-		logrus.WithFields(logrus.Fields{
-			"error": ctx.Err(),
-			"text":  text,
-		}).Debug("context cancelled while posting tweet")
-		return nil, ctx.Err()
+	resp, err := c.makeRequest(ctx, http.MethodPost, c.config.TweetEndpoint, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to post tweet: %w", err)
 	}
+	defer resp.Body.Close()
+
+	var tweetResp TweetResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tweetResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Handle potential errors
+	if len(tweetResp.Errors) > 0 {
+		return nil, fmt.Errorf("twitter API error: %s", tweetResp.Errors[0].Message)
+	}
+
+	// Unmarshal the single tweet response
+	tweet, err := tweetResp.UnmarshalTweet()
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal tweet: %w", err)
+	}
+
+	return tweet, nil
 }

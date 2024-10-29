@@ -100,11 +100,16 @@ func (h *MentionsHandler) CheckMentions(ctx context.Context) error {
 }
 
 func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.TweetResponse) error {
-	if resp == nil || len(resp.Data) == 0 {
+	if resp == nil {
 		return nil
 	}
 
-	for _, tweet := range resp.Data {
+	tweets, err := resp.UnmarshalTweets()
+	if err != nil {
+		return err
+	}
+
+	for _, tweet := range tweets {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

@@ -124,9 +124,10 @@ func (c *TwitterClient) postTweetHelper(ctx context.Context, endpoint string, re
 		return nil, err
 	}
 
-	if len(tweetResponse.Data) == 0 {
-		return nil, fmt.Errorf("no tweet data returned in response")
+	tweet, err := tweetResponse.UnmarshalTweet()
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal tweet: %w", err)
 	}
 
-	return &tweetResponse.Data[0], nil
+	return tweet, nil
 }

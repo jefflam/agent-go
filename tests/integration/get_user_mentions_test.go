@@ -98,11 +98,13 @@ var _ = Describe("GetUserMentions", func() {
 					receivedData = true
 					if resp != nil && resp.Tweet != nil {
 						Expect(resp.Tweet.Meta).NotTo(BeNil())
-						if len(resp.Tweet.Data) > 0 {
-							Expect(resp.Tweet.Data[0].ID).NotTo(BeEmpty())
-							Expect(resp.Tweet.Data[0].Text).NotTo(BeEmpty())
-							GinkgoWriter.Printf("Received mention: %s\n", resp.Tweet.Data[0].Text)
-							GinkgoWriter.Printf("Conversation ID: %s\n", resp.ConversationID)
+						tweets, err := resp.Tweet.UnmarshalTweets()
+						Expect(err).NotTo(HaveOccurred())
+						if len(tweets) > 0 {
+							Expect(tweets[0].ID).NotTo(BeEmpty())
+							Expect(tweets[0].Text).NotTo(BeEmpty())
+							GinkgoWriter.Printf("Received mention: %s\n", tweets[0].Text)
+							GinkgoWriter.Printf("Conversation ID: %s\n", tweets[0].ConversationID)
 						}
 					}
 				case err, ok := <-errChan:
@@ -181,9 +183,11 @@ var _ = Describe("GetUserMentions", func() {
 					receivedData = true
 					if resp != nil && resp.Tweet != nil {
 						Expect(resp.Tweet.Meta).NotTo(BeNil())
-						if len(resp.Tweet.Data) > 0 {
-							Expect(resp.Tweet.Data[0].ID).NotTo(BeEmpty())
-							Expect(resp.Tweet.Data[0].Text).NotTo(BeEmpty())
+						tweets, err := resp.Tweet.UnmarshalTweets()
+						Expect(err).NotTo(HaveOccurred())
+						if len(tweets) > 0 {
+							Expect(tweets[0].ID).NotTo(BeEmpty())
+							Expect(tweets[0].Text).NotTo(BeEmpty())
 						}
 					}
 				case err, ok := <-errChan:
