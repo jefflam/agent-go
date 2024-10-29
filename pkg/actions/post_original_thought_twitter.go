@@ -69,9 +69,16 @@ func (p *OriginalThoughtPoster) PostOriginalThought(ctx context.Context, config 
 	return tweet, nil
 }
 
+// ThoughtOptions configures the original thought posting action
+type ThoughtOptions struct {
+	Interval    time.Duration
+	Topic       string  // Default topic to post about
+	Temperature float64 // Controls randomness of thought generation
+}
+
 type OriginalThoughtAction struct {
 	poster   *OriginalThoughtPoster
-	interval time.Duration
+	options  ThoughtOptions
 	stopChan chan struct{}
 	logger   *logrus.Logger
 }
@@ -79,12 +86,12 @@ type OriginalThoughtAction struct {
 func NewOriginalThoughtAction(
 	thoughtGen thoughts.OriginalThoughtGenerator,
 	twitterClient *twitter.TwitterClient,
-	interval time.Duration,
 	logger *logrus.Logger,
+	options ThoughtOptions,
 ) *OriginalThoughtAction {
 	return &OriginalThoughtAction{
 		poster:   NewOriginalThoughtPoster(thoughtGen, twitterClient),
-		interval: interval,
+		options:  options,
 		stopChan: make(chan struct{}),
 		logger:   logger,
 	}
@@ -95,7 +102,7 @@ func (a *OriginalThoughtAction) Name() string {
 }
 
 func (a *OriginalThoughtAction) Execute(ctx context.Context) error {
-	ticker := time.NewTicker(a.interval)
+	ticker := time.NewTicker(a.options.Interval)
 	defer ticker.Stop()
 
 	for {
@@ -106,8 +113,8 @@ func (a *OriginalThoughtAction) Execute(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			_, err := a.poster.PostOriginalThought(ctx, OriginalThoughtConfig{
-				Topic:       "Memecoins",
-				Temperature: 0.7,
+				Topic:       a.options.Topic,
+				Temperature: a.options.Temperature,
 			})
 			if err != nil {
 				a.logger.WithError(err).Error("Failed to post original thought")

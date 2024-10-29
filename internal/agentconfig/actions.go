@@ -31,8 +31,10 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 	thoughtAction := actions.NewOriginalThoughtAction(
 		thoughts.NewOriginalThoughtGenerator(config.LLM),
 		config.TwitterClient,
-		30*time.Second,
 		config.Logger,
+		actions.ThoughtOptions{
+			Interval: 30 * time.Second,
+		},
 	)
 
 	return []actions.Action{
