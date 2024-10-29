@@ -42,8 +42,14 @@ func (c *TwitterClient) GetTweetByID(ctx context.Context, params GetTweetByIDPar
 				"tweet.fields": strings.Join(append(
 					c.config.GetTweetFields(),
 					"conversation_id",
+					"in_reply_to_user_id",
+					"referenced_tweets",
 				), ","),
-				"expansions": c.config.GetExpansions(),
+				"expansions": strings.Join(append(
+					c.config.GetExpansions(),
+					"referenced_tweets.id",
+					"in_reply_to_user_id",
+				), ","),
 			}
 
 			log.WithFields(logrus.Fields{
@@ -66,6 +72,18 @@ func (c *TwitterClient) GetTweetByID(ctx context.Context, params GetTweetByIDPar
 				return
 			}
 
+			// Validate conversation_id presence
+			tweet, err := tweetResp.UnmarshalTweet()
+			if err != nil {
+				log.WithError(err).Error("Failed to unmarshal tweet")
+				errChan <- fmt.Errorf("failed to unmarshal tweet: %w", err)
+				return
+			}
+
+			if tweet.ConversationID == "" {
+				log.Warn("Tweet response missing conversation_id")
+			}
+
 			// Check for API errors
 			if len(tweetResp.Errors) > 0 {
 				for _, apiErr := range tweetResp.Errors {
@@ -78,9 +96,12 @@ func (c *TwitterClient) GetTweetByID(ctx context.Context, params GetTweetByIDPar
 				return
 			}
 
-			// Log successful response
+			// Log successful response with conversation details
 			log.WithFields(logrus.Fields{
-				"tweet_found": tweetResp.Data != nil,
+				"tweet_found":       tweetResp.Data != nil,
+				"conversation_id":   tweet.ConversationID,
+				"in_reply_to_user":  tweet.InReplyToUserID,
+				"referenced_tweets": tweet.ReferencedTweets,
 			}).Debug("Received tweet response")
 
 			// Send the response to the data channel
