@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"github.com/lisanmuaddib/agent-go/internal/agentconfig"
 	agent "github.com/lisanmuaddib/agent-go/pkg"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
@@ -14,10 +15,27 @@ import (
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		// Only log warning since .env is optional
+		logrus.WithError(err).Warn("Error loading .env file")
+	}
+
 	// Initialize logger
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
-	log.SetLevel(logrus.InfoLevel)
+
+	// Get log level from environment
+	logLevel := os.Getenv("LOG_LEVEL")
+	if level, err := logrus.ParseLevel(logLevel); err == nil {
+		log.SetLevel(level)
+	} else {
+		log.SetLevel(logrus.InfoLevel)
+		log.WithFields(logrus.Fields{
+			"attempted_level": logLevel,
+			"default_level":   "INFO",
+		}).Warn("Invalid log level specified, defaulting to INFO")
+	}
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
