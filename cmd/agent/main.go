@@ -52,6 +52,16 @@ func main() {
 		LLM:           llmClient.GetLLM(),
 		TwitterClient: twitterClient,
 		Logger:        log,
+		Tasks: map[agent.TaskType]agent.TaskConfig{
+			agent.TaskMentions: {
+				Enabled:  true,
+				Interval: agent.DefaultMentionInterval,
+				Metadata: agent.TaskMetadata{
+					Description: "Processes and responds to @mentions",
+					Priority:    agent.PriorityHigh,
+				},
+			},
+		},
 	})
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create agent")
