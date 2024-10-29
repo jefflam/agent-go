@@ -96,9 +96,9 @@ var _ = Describe("GetUserMentions", func() {
 						continue
 					}
 					receivedData = true
-					if resp != nil && resp.Tweet != nil {
-						Expect(resp.Tweet.Meta).NotTo(BeNil())
-						tweets, err := resp.Tweet.UnmarshalTweets()
+					if resp != nil && len(resp.Data) > 0 {
+						Expect(resp.Meta).NotTo(BeNil())
+						tweets, err := resp.UnmarshalTweets()
 						Expect(err).NotTo(HaveOccurred())
 						if len(tweets) > 0 {
 							Expect(tweets[0].ID).NotTo(BeEmpty())
@@ -181,9 +181,9 @@ var _ = Describe("GetUserMentions", func() {
 						continue
 					}
 					receivedData = true
-					if resp != nil && resp.Tweet != nil {
-						Expect(resp.Tweet.Meta).NotTo(BeNil())
-						tweets, err := resp.Tweet.UnmarshalTweets()
+					if resp != nil && len(resp.Data) > 0 {
+						Expect(resp.Meta).NotTo(BeNil())
+						tweets, err := resp.UnmarshalTweets()
 						Expect(err).NotTo(HaveOccurred())
 						if len(tweets) > 0 {
 							Expect(tweets[0].ID).NotTo(BeEmpty())

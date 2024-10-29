@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lisanmuaddib/agent-go/pkg/actions"
@@ -18,15 +19,18 @@ type ActionConfig struct {
 
 // ConfigureActions sets up all agent actions
 func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
-	mentionsAction := actions.NewMentionsHandler(
+	mentionsHandler, err := actions.NewMentionsHandler(
 		config.TwitterClient,
 		config.LLM,
 		config.Logger,
 		actions.MentionsOptions{
-			Interval:   5 * time.Minute,
+			Interval:   30 * time.Second,
 			MaxResults: 100,
 		},
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create mentions handler: %w", err)
+	}
 
 	thoughtAction := actions.NewOriginalThoughtAction(
 		thoughts.NewOriginalThoughtGenerator(config.LLM),
@@ -38,7 +42,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 	)
 
 	return []actions.Action{
-		mentionsAction,
+		mentionsHandler,
 		thoughtAction,
 	}, nil
 }

@@ -5,47 +5,56 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 )
 
-// GetUserMentionsParams holds the parameters for the GetUserMentions request
+// GetUserMentionsParams represents parameters for fetching user mentions
 type GetUserMentionsParams struct {
-	// UserID specifies which user's mentions to retrieve.
-	// If empty, defaults to the authenticated user.
-	UserID string
-
-	// PaginationToken is used for cursor-based pagination through results.
-	// Leave empty for the first request.
-	PaginationToken string
-
-	// MaxResults specifies the number of tweets to return per page.
-	// Valid values are 5-100. If not specified, defaults to 10.
-	MaxResults int
+	UserID          string   `json:"user_id,omitempty"`
+	MaxResults      int      `json:"max_results,omitempty"`
+	PaginationToken string   `json:"pagination_token,omitempty"`
+	SinceID         string   `json:"since_id,omitempty"`
+	UntilID         string   `json:"until_id,omitempty"`
+	StartTime       string   `json:"start_time,omitempty"`
+	EndTime         string   `json:"end_time,omitempty"`
+	TweetFields     []string `json:"tweet.fields,omitempty"`
+	UserFields      []string `json:"user.fields,omitempty"`
+	Expansions      []string `json:"expansions,omitempty"`
+	MediaFields     []string `json:"media.fields,omitempty"`
+	PlaceFields     []string `json:"place.fields,omitempty"`
+	PollFields      []string `json:"poll.fields,omitempty"`
 }
 
-// MentionResponse wraps TweetResponse with conversation tracking
-type MentionResponse struct {
-	Tweet          *TweetResponse
-	ConversationID string
+// GetConversationID returns the conversation ID from the first tweet in the response
+func (mr *MentionResponse) GetConversationID() string {
+	if mr == nil || len(mr.Data) == 0 {
+		return ""
+	}
+	return mr.Data[0].ConversationID
 }
 
-// GetUserMentions retrieves tweets mentioning a specific user.
-// It returns two channels:
-// - A channel that streams MentionResponse objects containing the mention data and conversation ID
-// - An error channel for any errors encountered during processing
-//
-// The endpoint uses cursor-based pagination via NextToken to retrieve all results.
-// Results include:
-// - Tweet text and metadata
-// - Author information
-// - Conversation threading details
-// - Referenced tweet information
-//
-// Rate Limits:
-// - App-only auth: 450 requests per 15-minute window
-// - User auth: 180 requests per 15-minute window
+// Convert MentionResponse to TweetResponse for compatibility
+func (mr *MentionResponse) ToTweetResponse() (*TweetResponse, error) {
+	if mr == nil {
+		return nil, nil
+	}
+
+	// Convert the tweets array to json.RawMessage
+	rawData, err := json.Marshal(mr.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal tweets: %w", err)
+	}
+
+	return &TweetResponse{
+		Data:     json.RawMessage(rawData),
+		Includes: mr.Includes,
+		Errors:   mr.Errors,
+		Meta:     mr.Meta,
+	}, nil
+}
+
+// GetUserMentions retrieves tweets mentioning a specific user
 func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMentionsParams) (chan *MentionResponse, chan error) {
 	dataChan := make(chan *MentionResponse)
 	errChan := make(chan error)
@@ -78,25 +87,10 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 				errChan <- ctx.Err()
 				return
 			default:
-				body := map[string]interface{}{
-					"pagination_token": params.PaginationToken,
-					"max_results":      params.MaxResults,
-					"tweet.fields": strings.Join(append(
-						c.config.GetTweetFields(),
-						"conversation_id",
-						"in_reply_to_user_id",
-						"referenced_tweets",
-						"author_id",
-					), ","),
-					"expansions": strings.Join(append(
-						c.config.GetExpansions(),
-						"referenced_tweets.id",
-						"in_reply_to_user_id",
-						"author_id",
-					), ","),
-				}
+				// Create mention response
+				mentionResp := &MentionResponse{}
 
-				resp, err := c.makeRequest(ctx, "GET", endpoint, body)
+				resp, err := c.makeRequest(ctx, "GET", endpoint, params)
 				if err != nil {
 					log.WithError(err).Error("failed to fetch user mentions")
 					errChan <- err
@@ -104,49 +98,27 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 				}
 				defer resp.Body.Close()
 
-				var tweetResp TweetResponse
-				if err := json.NewDecoder(resp.Body).Decode(&tweetResp); err != nil {
+				if err := json.NewDecoder(resp.Body).Decode(mentionResp); err != nil {
 					log.WithError(err).Error("failed to decode response")
 					errChan <- err
 					return
 				}
 
-				tweets, err := tweetResp.UnmarshalTweets()
-				if err != nil {
-					errChan <- fmt.Errorf("failed to unmarshal tweets: %w", err)
-					return
-				}
-
-				// Create MentionResponse with conversation ID
-				mentionResp := &MentionResponse{
-					Tweet: &tweetResp,
-				}
-
-				// Extract conversation ID from the first tweet if available
-				if len(tweets) > 0 {
-					tweet := tweets[0]
-
-					// If conversation_id is empty, use the tweet's ID as the conversation starter
-					if tweet.ConversationID == "" {
-						mentionResp.ConversationID = tweet.ID
-					} else {
-						mentionResp.ConversationID = tweet.ConversationID
-					}
-
+				// Log conversation details
+				if len(mentionResp.Data) > 0 {
 					c.logger.WithFields(logrus.Fields{
-						"tweet_id":            tweet.ID,
-						"conversation_id":     mentionResp.ConversationID,
-						"is_new_conversation": tweet.ConversationID == "",
+						"tweet_id":        mentionResp.Data[0].ID,
+						"conversation_id": mentionResp.Data[0].ConversationID,
 					}).Debug("Processing tweet conversation")
 				}
 
 				dataChan <- mentionResp
 
-				if tweetResp.Meta.NextToken == "" {
+				if mentionResp.Meta.NextToken == "" {
 					return
 				}
 
-				params.PaginationToken = tweetResp.Meta.NextToken
+				params.PaginationToken = mentionResp.Meta.NextToken
 			}
 		}
 	}()

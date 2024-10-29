@@ -411,3 +411,19 @@ type ConversationResponse struct {
 	Errors   []TwitterError `json:"errors,omitempty"`
 	Meta     *Meta          `json:"meta,omitempty"`
 }
+
+// MentionResponse represents the response from the mentions timeline endpoint
+type MentionResponse struct {
+	Data     []Tweet        `json:"data"`
+	Includes *TweetIncludes `json:"includes,omitempty"`
+	Meta     *Meta          `json:"meta,omitempty"`
+	Errors   []TwitterError `json:"errors,omitempty"`
+}
+
+// UnmarshalTweets returns the tweets from a mention response
+func (mr *MentionResponse) UnmarshalTweets() ([]Tweet, error) {
+	if mr == nil {
+		return nil, fmt.Errorf("mention response is nil")
+	}
+	return mr.Data, nil
+}

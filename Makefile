@@ -10,7 +10,7 @@ build:
 	@go build -o $(BUILD_DIR)/$(BINARY_NAME) cmd/agent/main.go
 
 # Run the application
-run: build
+run: clean build
 	@echo "Running..."
 	@./$(BUILD_DIR)/$(BINARY_NAME)
 

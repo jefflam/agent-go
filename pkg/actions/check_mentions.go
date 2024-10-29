@@ -2,20 +2,23 @@ package actions
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
+	"github.com/lisanmuaddib/agent-go/pkg/memory"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
 )
 
 type MentionsHandler struct {
-	client  *twitter.TwitterClient
-	llm     llms.Model
-	logger  *logrus.Logger
-	ticker  *time.Ticker
-	options MentionsOptions
-	done    chan struct{}
+	client     *twitter.TwitterClient
+	llm        llms.Model
+	logger     *logrus.Logger
+	ticker     *time.Ticker
+	options    MentionsOptions
+	done       chan struct{}
+	tweetStore *memory.TweetStore
 }
 
 type MentionsOptions struct {
@@ -23,7 +26,7 @@ type MentionsOptions struct {
 	MaxResults int
 }
 
-func NewMentionsHandler(client *twitter.TwitterClient, llm llms.Model, logger *logrus.Logger, options MentionsOptions) *MentionsHandler {
+func NewMentionsHandler(client *twitter.TwitterClient, llm llms.Model, logger *logrus.Logger, options MentionsOptions) (*MentionsHandler, error) {
 	if options.Interval == 0 {
 		options.Interval = 30 * time.Second
 	}
@@ -31,14 +34,21 @@ func NewMentionsHandler(client *twitter.TwitterClient, llm llms.Model, logger *l
 		options.MaxResults = 100
 	}
 
-	return &MentionsHandler{
-		client:  client,
-		llm:     llm,
-		logger:  logger,
-		ticker:  time.NewTicker(options.Interval),
-		options: options,
-		done:    make(chan struct{}),
+	// Initialize tweet store
+	tweetStore, err := memory.NewTweetStore(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tweet store: %w", err)
 	}
+
+	return &MentionsHandler{
+		client:     client,
+		llm:        llm,
+		logger:     logger,
+		ticker:     time.NewTicker(options.Interval),
+		options:    options,
+		done:       make(chan struct{}),
+		tweetStore: tweetStore,
+	}, nil
 }
 
 // Name returns the unique identifier for this action
@@ -82,6 +92,28 @@ func (h *MentionsHandler) CheckMentions(ctx context.Context) error {
 
 	params := twitter.GetUserMentionsParams{
 		MaxResults: h.options.MaxResults,
+		TweetFields: []string{
+			"id",
+			"text",
+			"author_id",
+			"conversation_id",
+			"created_at",
+			"entities",
+			"geo",
+			"in_reply_to_user_id",
+			"lang",
+			"public_metrics",
+			"referenced_tweets",
+			"reply_settings",
+			"source",
+		},
+		Expansions: []string{
+			"author_id",
+			"referenced_tweets.id",
+			"in_reply_to_user_id",
+			"entities.mentions.username",
+			"referenced_tweets.id.author_id",
+		},
 	}
 
 	dataChan, errChan := h.client.GetUserMentions(ctx, params)
@@ -95,18 +127,18 @@ func (h *MentionsHandler) CheckMentions(ctx context.Context) error {
 		if !ok {
 			return nil
 		}
-		return h.processMentions(ctx, resp.Tweet)
+		return h.processMentions(ctx, resp)
 	}
 }
 
-func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.TweetResponse) error {
+func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.MentionResponse) error {
 	if resp == nil {
 		return nil
 	}
 
 	tweets, err := resp.UnmarshalTweets()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal tweets: %w", err)
 	}
 
 	for _, tweet := range tweets {
@@ -114,16 +146,27 @@ func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.Twe
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			h.logger.WithFields(logrus.Fields{
+			log := h.logger.WithFields(logrus.Fields{
 				"tweet_id":        tweet.ID,
-				"author":          tweet.AuthorID,
+				"author_id":       tweet.AuthorID,
 				"text":            tweet.Text,
 				"conversation_id": tweet.ConversationID,
-			}).Info("Processing mention")
+				"created_at":      tweet.CreatedAt,
+				"reply_settings":  tweet.ReplySettings,
+			})
 
-			// TODO: Implement tweet processing logic
-			// This will be implemented in a separate PR
+			// Determine the category of the tweet
+			category := memory.DetermineTweetCategory(tweet)
+
+			// Store the tweet with all its metadata
+			if err := h.tweetStore.SaveTweet(tweet, category); err != nil {
+				log.WithError(err).Error("Failed to save tweet")
+				continue
+			}
+
+			log.Info("Processed mention")
 		}
 	}
+
 	return nil
 }
