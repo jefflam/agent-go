@@ -8,16 +8,18 @@ import (
 
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/memory"
+	"github.com/lisanmuaddib/agent-go/pkg/thoughts"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 )
 
 // TweetResponder handles responding to tweets that need replies
 type TweetResponder struct {
-	tweetStore *memory.TweetStore
-	client     *twitter.TwitterClient
-	logger     *logrus.Logger
-	limiter    *rate.Limiter
+	tweetStore     *memory.TweetStore
+	client         *twitter.TwitterClient
+	logger         *logrus.Logger
+	limiter        *rate.Limiter
+	replyGenerator thoughts.MentionReplyGenerator
 }
 
 // BatchProcessConfig holds configuration for batch processing
@@ -43,7 +45,12 @@ func DefaultBatchConfig() BatchProcessConfig {
 }
 
 // NewTweetResponder creates a new TweetResponder instance
-func NewTweetResponder(store *memory.TweetStore, client *twitter.TwitterClient, logger *logrus.Logger) *TweetResponder {
+func NewTweetResponder(
+	store *memory.TweetStore,
+	client *twitter.TwitterClient,
+	logger *logrus.Logger,
+	replyGenerator thoughts.MentionReplyGenerator,
+) *TweetResponder {
 	// Twitter API v2 rate limit: 50 tweets per 15 minutes
 	// Using a more conservative rate of 45 tweets per 15 minutes
 	tweetsPerWindow := 45
@@ -51,10 +58,11 @@ func NewTweetResponder(store *memory.TweetStore, client *twitter.TwitterClient, 
 	r := rate.Every(windowDuration / time.Duration(tweetsPerWindow))
 
 	return &TweetResponder{
-		tweetStore: store,
-		client:     client,
-		logger:     logger,
-		limiter:    rate.NewLimiter(r, 1), // burst size of 1 for conservative approach
+		tweetStore:     store,
+		client:         client,
+		logger:         logger,
+		limiter:        rate.NewLimiter(r, 1), // burst size of 1 for conservative approach
+		replyGenerator: replyGenerator,
 	}
 }
 
@@ -191,8 +199,18 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.Tw
 		"conversation_id": tweet.ConversationID,
 	})
 
-	// TODO: Generate reply text using your AI/LLM implementation
-	replyText := "This is a placeholder reply" // Replace with actual AI-generated reply
+	// Generate AI reply using the mention reply generator
+	config := thoughts.MentionReplyConfig{
+		TweetText:   tweet.Text,
+		MaxLength:   280, // Twitter's character limit
+		Temperature: 0.7, // Adjust temperature as needed
+		// Personality will use DefaultReplyPersonality by default
+	}
+
+	replyText, err := tr.replyGenerator.GenerateReply(ctx, config)
+	if err != nil {
+		return fmt.Errorf("failed to generate reply: %w", err)
+	}
 
 	// Post the reply
 	params := twitter.PostReplyThreadParams{
@@ -209,6 +227,7 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.Tw
 	log.WithFields(logrus.Fields{
 		"reply_tweet_id": postedTweet.ID,
 		"original_tweet": tweet.TweetID,
+		"reply_text":     replyText,
 	}).Info("Successfully posted reply")
 
 	return nil

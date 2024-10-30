@@ -58,8 +58,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "mention",
-    "processed_at": "2024-10-30T08:17:18.234799-07:00",
-    "last_updated": "2024-10-30T08:17:18.234799-07:00",
+    "processed_at": "2024-10-30T12:56:10.612771-07:00",
+    "last_updated": "2024-10-30T12:56:10.612771-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": true,
@@ -67,7 +67,7 @@
       "root_id": "1850256273050358192",
       "conversation_id": "1850256273050358192",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.234799-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.612771-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -141,8 +141,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "mention",
-    "processed_at": "2024-10-30T08:17:18.233998-07:00",
-    "last_updated": "2024-10-30T08:17:18.233998-07:00",
+    "processed_at": "2024-10-30T12:56:10.61208-07:00",
+    "last_updated": "2024-10-30T12:56:10.61208-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": true,
@@ -150,7 +150,7 @@
       "root_id": "1850264427628818628",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.233998-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.61208-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -221,8 +221,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-30T08:17:18.233387-07:00",
-    "last_updated": "2024-10-30T08:17:18.233387-07:00",
+    "processed_at": "2024-10-30T12:56:10.611203-07:00",
+    "last_updated": "2024-10-30T12:56:10.611203-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -230,7 +230,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.233387-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.611203-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -301,8 +301,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-30T08:17:18.232712-07:00",
-    "last_updated": "2024-10-30T08:17:18.232712-07:00",
+    "processed_at": "2024-10-30T12:56:10.610403-07:00",
+    "last_updated": "2024-10-30T12:56:10.610403-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -310,7 +310,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.232712-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.610403-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -381,8 +381,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-30T08:17:18.23185-07:00",
-    "last_updated": "2024-10-30T08:17:18.23185-07:00",
+    "processed_at": "2024-10-30T12:56:10.609673-07:00",
+    "last_updated": "2024-10-30T12:56:10.609673-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -390,7 +390,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.23185-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.609673-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -448,7 +448,7 @@
     },
     "public_metrics": {
       "retweet_count": 0,
-      "reply_count": 1,
+      "reply_count": 2,
       "like_count": 0,
       "quote_count": 0
     },
@@ -461,8 +461,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-30T08:17:18.231026-07:00",
-    "last_updated": "2024-10-30T08:17:18.231026-07:00",
+    "processed_at": "2024-10-30T12:56:10.608776-07:00",
+    "last_updated": "2024-10-30T12:56:10.608776-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -470,7 +470,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.231026-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.608776-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -541,8 +541,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-30T08:17:18.229865-07:00",
-    "last_updated": "2024-10-30T08:17:18.229865-07:00",
+    "processed_at": "2024-10-30T12:56:10.607732-07:00",
+    "last_updated": "2024-10-30T12:56:10.607732-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -550,7 +550,7 @@
       "root_id": "",
       "conversation_id": "1850256273050358192",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-30T08:17:18.229865-07:00",
+      "last_reply_at": "2024-10-30T12:56:10.607732-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0

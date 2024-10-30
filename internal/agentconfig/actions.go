@@ -43,10 +43,13 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		},
 	)
 
+	replyGenerator := thoughts.NewMentionReplyGenerator(config.LLM)
+
 	tweetResponder := actions.NewTweetResponder(
 		config.TweetStore,
 		config.TwitterClient,
 		config.Logger,
+		replyGenerator,
 	)
 
 	tweetResponseAction := actions.NewTweetResponseAction(
