@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
@@ -215,7 +216,33 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.Tw
 
 // isRateLimitError checks if the error is related to rate limiting
 func (tr *TweetResponder) isRateLimitError(err error) bool {
-	// Implement based on your Twitter client's error types
-	// Example: return strings.Contains(err.Error(), "rate limit exceeded")
+	if err == nil {
+		return false
+	}
+
+	// Check for Twitter API v2 rate limit errors
+	errStr := err.Error()
+	rateLimitKeywords := []string{
+		"rate limit exceeded",
+		"too many requests",
+		"429 Too Many Requests",
+		"rate_limit_exceeded",
+		"x-rate-limit-remaining: 0",
+		"x-rate-limit-reset",
+	}
+
+	for _, keyword := range rateLimitKeywords {
+		if strings.Contains(strings.ToLower(errStr), keyword) {
+			tr.logger.WithFields(logrus.Fields{
+				"error":    errStr,
+				"type":     "rate_limit",
+				"endpoint": "tweets",
+				"window":   "15m",
+				"limit":    "50 tweets",
+			}).Debug("Twitter API v2 rate limit error detected")
+			return true
+		}
+	}
+
 	return false
 }
