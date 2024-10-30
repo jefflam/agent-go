@@ -202,12 +202,35 @@ func (s *TweetStore) GetConversation(conversationID string) []StoredTweet {
 }
 
 func (s *TweetStore) load() error {
+	s.logger.WithField("filepath", s.filepath).Debug("Loading tweets from file")
+
 	data, err := os.ReadFile(s.filepath)
 	if err != nil {
+		s.logger.WithError(err).Error("Failed to read tweets file")
 		return err
 	}
 
-	return json.Unmarshal(data, &s.tweets)
+	s.logger.WithField("data_size", len(data)).Debug("Read tweets file")
+
+	err = json.Unmarshal(data, &s.tweets)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to unmarshal tweets")
+		return err
+	}
+
+	s.logger.WithField("tweets_loaded", len(s.tweets)).Info("Successfully loaded tweets from file")
+
+	// Log a few tweet IDs for verification
+	var tweetIDs []string
+	for id := range s.tweets {
+		tweetIDs = append(tweetIDs, id)
+		if len(tweetIDs) >= 3 {
+			break
+		}
+	}
+	s.logger.WithField("sample_tweet_ids", tweetIDs).Debug("Sample of loaded tweets")
+
+	return nil
 }
 
 func (s *TweetStore) save() error {
