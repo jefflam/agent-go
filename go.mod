@@ -9,6 +9,7 @@ require (
 	github.com/onsi/gomega v1.34.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/tmc/langchaingo v0.1.12
+	golang.org/x/time v0.5.0
 )
 
 require (
