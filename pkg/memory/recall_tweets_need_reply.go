@@ -16,6 +16,8 @@ type TweetNeedingReply struct {
 	LastReplyTime   time.Time `json:"last_reply_time"`
 	UnreadReplies   int       `json:"unread_replies"`
 	IsParticipating bool      `json:"is_participating"`
+	Text            string    `json:"text"`
+	AuthorID        string    `json:"author_id"`
 }
 
 // RecallTweetsNeedingReply finds tweets in conversations where:
@@ -93,6 +95,8 @@ func (s *TweetStore) RecallTweetsNeedingReply(ctx context.Context, client Twitte
 					LastReplyTime:   tweetTime,
 					UnreadReplies:   1,
 					IsParticipating: true,
+					Text:            tweet.Text,
+					AuthorID:        tweet.AuthorID,
 				}
 				log.WithField("conversation_id", tweet.ConversationID).Debug("Created new conversation entry")
 			} else if tweetTime.After(existing.LastReplyTime) {
@@ -100,6 +104,8 @@ func (s *TweetStore) RecallTweetsNeedingReply(ctx context.Context, client Twitte
 				existing.TweetID = tweet.ID
 				existing.LastReplyTime = tweetTime
 				existing.UnreadReplies++
+				existing.Text = tweet.Text
+				existing.AuthorID = tweet.AuthorID
 				log.WithField("conversation_id", tweet.ConversationID).Debug("Updated existing conversation")
 			}
 		}
