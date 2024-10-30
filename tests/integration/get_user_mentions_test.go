@@ -53,7 +53,7 @@ var _ = Describe("GetUserMentions", func() {
 			RateLimit:         180,
 			RateWindow:        int(15 * time.Minute / time.Second),
 			Logger:            logger,
-			DefaultFields:     []string{"id", "text", "created_at"},
+			DefaultFields:     []string{"id", "text", "created_at", "conversation_id", "in_reply_to_user_id", "referenced_tweets"},
 			MetricFields:      []string{"like_count", "reply_count", "retweet_count"},
 			ExpansionFields: []string{
 				"author_id",

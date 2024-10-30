@@ -158,6 +158,12 @@ func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.Men
 			// Determine the category of the tweet
 			category := memory.DetermineTweetCategory(tweet)
 
+			// Log before saving
+			log.WithFields(logrus.Fields{
+				"category":            category,
+				"has_conversation_id": tweet.ConversationID != "",
+			}).Debug("Saving tweet to store")
+
 			// Store the tweet with all its metadata
 			if err := h.tweetStore.SaveTweet(tweet, category); err != nil {
 				log.WithError(err).Error("Failed to save tweet")

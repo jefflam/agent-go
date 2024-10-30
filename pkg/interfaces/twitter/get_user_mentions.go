@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -55,7 +56,7 @@ func (mr *MentionResponse) ToTweetResponse() (*TweetResponse, error) {
 }
 
 // GetUserMentions retrieves tweets mentioning a specific user
-func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMentionsParams) (chan *MentionResponse, chan error) {
+func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMentionsParams) (<-chan *MentionResponse, <-chan error) {
 	dataChan := make(chan *MentionResponse)
 	errChan := make(chan error)
 
@@ -63,64 +64,87 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 		defer close(dataChan)
 		defer close(errChan)
 
-		userID := params.UserID
-		if userID == "" {
-			// Get actual user ID instead of using "me"
-			var err error
-			userID, err = c.GetAuthenticatedUserID(ctx)
+		// Get authenticated user ID if not provided
+		if params.UserID == "" {
+			authUserID, err := c.GetAuthenticatedUserID(ctx)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get authenticated user ID: %w", err)
 				return
 			}
+			params.UserID = authUserID
 		}
 
-		log := c.logger.WithFields(logrus.Fields{
-			"method": "GetUserMentions",
-			"userID": userID,
-		})
+		// Validate MaxResults
+		if params.MaxResults > 100 {
+			errChan <- fmt.Errorf("invalid max_results: must be between 1 and 100")
+			return
+		}
 
-		endpoint := fmt.Sprintf("/users/%s/mentions", userID)
+		// Log the incoming params
+		c.logger.WithFields(logrus.Fields{
+			"incoming_params": params,
+		}).Debug("Received GetUserMentions params")
 
-		for {
-			select {
-			case <-ctx.Done():
-				errChan <- ctx.Err()
-				return
-			default:
-				// Create mention response
-				mentionResp := &MentionResponse{}
+		// Build query parameters with detailed logging
+		queryParams := map[string]string{
+			"max_results": fmt.Sprintf("%d", params.MaxResults),
+		}
 
-				resp, err := c.makeRequest(ctx, "GET", endpoint, params)
-				if err != nil {
-					log.WithError(err).Error("failed to fetch user mentions")
-					errChan <- err
-					return
-				}
-				defer resp.Body.Close()
-
-				if err := json.NewDecoder(resp.Body).Decode(mentionResp); err != nil {
-					log.WithError(err).Error("failed to decode response")
-					errChan <- err
-					return
-				}
-
-				// Log conversation details
-				if len(mentionResp.Data) > 0 {
-					c.logger.WithFields(logrus.Fields{
-						"tweet_id":        mentionResp.Data[0].ID,
-						"conversation_id": mentionResp.Data[0].ConversationID,
-					}).Debug("Processing tweet conversation")
-				}
-
-				dataChan <- mentionResp
-
-				if mentionResp.Meta.NextToken == "" {
-					return
-				}
-
-				params.PaginationToken = mentionResp.Meta.NextToken
+		// Add tweet fields with logging
+		tweetFields := params.TweetFields
+		if len(tweetFields) == 0 {
+			tweetFields = []string{
+				"id",
+				"text",
+				"created_at",
+				"conversation_id",
+				"in_reply_to_user_id",
+				"referenced_tweets",
+				"public_metrics",
+				"author_id",
+				"reply_settings",
 			}
+			c.logger.Debug("Using default tweet fields")
 		}
+		queryParams["tweet.fields"] = strings.Join(tweetFields, ",")
+
+		// Add expansions with logging
+		expansions := params.Expansions
+		if len(expansions) == 0 {
+			expansions = []string{
+				"author_id",
+				"referenced_tweets.id",
+				"in_reply_to_user_id",
+				"entities.mentions.username",
+				"referenced_tweets.id.author_id",
+			}
+			c.logger.Debug("Using default expansions")
+		}
+		queryParams["expansions"] = strings.Join(expansions, ",")
+
+		// Log the final query parameters
+		c.logger.WithFields(logrus.Fields{
+			"endpoint":     fmt.Sprintf("/users/%s/mentions", params.UserID),
+			"tweet_fields": queryParams["tweet.fields"],
+			"expansions":   queryParams["expansions"],
+			"max_results":  queryParams["max_results"],
+		}).Debug("Final API request parameters")
+
+		endpoint := fmt.Sprintf("/users/%s/mentions", params.UserID)
+		resp, err := c.makeRequestWithParams(ctx, "GET", endpoint, queryParams)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to make request: %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		var mentionResp MentionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&mentionResp); err != nil {
+			errChan <- fmt.Errorf("failed to decode response: %w", err)
+			return
+		}
+
+		dataChan <- &mentionResp
 	}()
 
 	return dataChan, errChan

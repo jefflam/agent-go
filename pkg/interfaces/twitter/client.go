@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -145,6 +146,57 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 	if err := c.handleResponse(resp); err != nil {
 		resp.Body.Close()
 		return nil, err
+	}
+
+	return resp, nil
+}
+
+// makeRequestWithParams makes a request to the Twitter API with query parameters
+func (c *TwitterClient) makeRequestWithParams(ctx context.Context, method, endpoint string, queryParams map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("%s%s", c.config.BaseURL, endpoint)
+
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add query parameters
+	q := req.URL.Query()
+	for key, value := range queryParams {
+		q.Add(key, value)
+	}
+	req.URL.RawQuery = q.Encode()
+
+	// Add OAuth 1.0a authentication for endpoints requiring user context
+	if strings.Contains(endpoint, "/mentions") {
+		authHeader, err := c.generateOAuth1Header(method, req.URL.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate OAuth header: %w", err)
+		}
+		req.Header.Set("Authorization", authHeader)
+	} else {
+		// Use Bearer token for other endpoints
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.config.BearerToken))
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	c.logger.WithFields(logrus.Fields{
+		"url":    req.URL.String(),
+		"method": method,
+		"params": queryParams,
+	}).Debug("Making request to Twitter API")
+
+	resp, err := c.auth.GetClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("twitter API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	return resp, nil

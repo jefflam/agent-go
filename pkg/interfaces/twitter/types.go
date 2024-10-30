@@ -427,3 +427,17 @@ func (mr *MentionResponse) UnmarshalTweets() ([]Tweet, error) {
 	}
 	return mr.Data, nil
 }
+
+type TwitterErrorResponse struct {
+	Errors []struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+func (e *TwitterErrorResponse) Error() string {
+	if len(e.Errors) == 0 {
+		return "unknown twitter API error"
+	}
+	return fmt.Sprintf("twitter API error: %s (code: %d)", e.Errors[0].Message, e.Errors[0].Code)
+}

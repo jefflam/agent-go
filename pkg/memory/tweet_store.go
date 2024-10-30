@@ -77,96 +77,88 @@ func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory) erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.logger.WithFields(logrus.Fields{
+		"tweet_id":            tweet.ID,
+		"raw_conversation_id": tweet.ConversationID,
+		"text":                tweet.Text,
+		"category":            category,
+	}).Debug("Attempting to save tweet")
+
 	now := time.Now()
 
-	// Create conversation reference if needed
-	var conversationRef *ConversationRef
+	// Create stored tweet with all fields
+	storedTweet := StoredTweet{
+		Tweet:       tweet,
+		Category:    category,
+		ProcessedAt: now,
+		LastUpdated: now,
+	}
+
+	// Add more detailed logging for conversation handling
 	if tweet.ConversationID != "" {
-		conversationRef = &ConversationRef{
-			ConversationID:  tweet.ConversationID,
-			LastReplyAt:     now,
-			LastReplyID:     tweet.ID,
-			LastReplyAuthor: tweet.AuthorID,
+		s.logger.WithFields(logrus.Fields{
+			"tweet_id":        tweet.ID,
+			"conversation_id": tweet.ConversationID,
+		}).Debug("Processing tweet with conversation ID")
+
+		conversationRef := &ConversationRef{
+			ConversationID: tweet.ConversationID,
+			LastReplyAt:    now,
 		}
 
 		// Check if this is a reply
 		if tweet.ReferencedTweets != nil {
+			s.logger.WithField("referenced_tweets", tweet.ReferencedTweets).Debug("Tweet has referenced tweets")
 			for _, ref := range tweet.ReferencedTweets {
 				if ref.Type == "replied_to" {
 					conversationRef.ParentID = ref.ID
-					// Try to find the parent tweet to establish conversation hierarchy
-					if parent, exists := s.tweets[ref.ID]; exists {
-						if parent.ConversationRef != nil {
-							conversationRef.RootID = parent.ConversationRef.RootID
-							conversationRef.ReplyDepth = parent.ConversationRef.ReplyDepth + 1
-						} else {
-							conversationRef.RootID = ref.ID
-							conversationRef.ReplyDepth = 1
-						}
-					} else {
-						conversationRef.RootID = ref.ID
-						conversationRef.ReplyDepth = 1
-					}
-					break
+					conversationRef.IsRoot = false
+					s.logger.WithFields(logrus.Fields{
+						"parent_id": ref.ID,
+						"type":      ref.Type,
+					}).Debug("Found parent tweet reference")
 				}
 			}
-		}
-
-		// If no parent found, this might be the root tweet
-		if conversationRef.RootID == "" {
+		} else {
+			// If no referenced tweets, this might be the root
 			conversationRef.IsRoot = true
 			conversationRef.RootID = tweet.ID
-			conversationRef.ReplyDepth = 0
+			s.logger.Debug("Tweet marked as conversation root")
 		}
 
-		// Update conversation metadata for all tweets in the conversation
-		for id, stored := range s.tweets {
-			if stored.ConversationID == tweet.ConversationID {
-				if stored.ConversationRef != nil {
-					stored.ConversationRef.ReplyCount++
-					stored.ConversationRef.LastReplyAt = now
-					stored.ConversationRef.LastReplyID = tweet.ID
-					stored.ConversationRef.LastReplyAuthor = tweet.AuthorID
-					s.tweets[id] = stored
-				}
-			}
-		}
-	}
-
-	// Check if tweet already exists
-	if existing, exists := s.tweets[tweet.ID]; exists {
-		existing.Tweet = tweet
-		existing.LastUpdated = now
-		existing.ProcessCount++
-		if conversationRef != nil {
-			existing.ConversationRef = conversationRef
-		}
-		s.tweets[tweet.ID] = existing
-
-		s.logger.WithFields(logrus.Fields{
-			"tweet_id":        tweet.ID,
-			"category":        existing.Category,
-			"conversation_id": tweet.ConversationID,
-			"count":           existing.ProcessCount,
-		}).Debug("Updated existing tweet")
+		storedTweet.ConversationRef = conversationRef
 	} else {
-		s.tweets[tweet.ID] = StoredTweet{
-			Tweet:           tweet,
-			Category:        category,
-			ProcessedAt:     now,
-			LastUpdated:     now,
-			ProcessCount:    1,
-			ConversationRef: conversationRef,
-		}
-
-		s.logger.WithFields(logrus.Fields{
-			"tweet_id":        tweet.ID,
-			"category":        category,
-			"conversation_id": tweet.ConversationID,
-		}).Debug("Stored new tweet")
+		s.logger.WithField("tweet_id", tweet.ID).Debug("Tweet has no conversation ID")
 	}
 
-	return s.save()
+	// Verify the stored tweet before saving
+	s.logger.WithFields(logrus.Fields{
+		"tweet_id":         tweet.ID,
+		"has_conversation": storedTweet.ConversationID != "",
+		"has_conv_ref":     storedTweet.ConversationRef != nil,
+		"category":         storedTweet.Category,
+	}).Debug("About to store tweet")
+
+	// Store the tweet
+	s.tweets[tweet.ID] = storedTweet
+
+	// Save to disk
+	if err := s.save(); err != nil {
+		return fmt.Errorf("failed to save tweet store: %w", err)
+	}
+
+	// Log successful save with full details
+	s.logger.WithFields(logrus.Fields{
+		"tweet_id":          tweet.ID,
+		"conversation_id":   tweet.ConversationID,
+		"category":          category,
+		"public_metrics":    tweet.PublicMetrics,
+		"referenced_tweets": tweet.ReferencedTweets,
+		"stored_conv_id":    s.tweets[tweet.ID].ConversationID,
+		"has_conv_ref":      s.tweets[tweet.ID].ConversationRef != nil,
+	}).Info("Successfully saved tweet to store")
+
+	return nil
 }
 
 func (s *TweetStore) GetTweet(id string) (*StoredTweet, error) {
