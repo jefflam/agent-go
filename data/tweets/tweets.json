@@ -51,15 +51,15 @@
     },
     "public_metrics": {
       "retweet_count": 0,
-      "reply_count": 0,
+      "reply_count": 1,
       "like_count": 0,
       "quote_count": 0
     },
     "reply_settings": "everyone",
     "withheld": {},
     "category": "mention",
-    "processed_at": "2024-10-29T20:00:14.118328-07:00",
-    "last_updated": "2024-10-29T20:00:14.118328-07:00",
+    "processed_at": "2024-10-30T08:17:18.234799-07:00",
+    "last_updated": "2024-10-30T08:17:18.234799-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": true,
@@ -67,7 +67,7 @@
       "root_id": "1850256273050358192",
       "conversation_id": "1850256273050358192",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.118328-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.234799-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -141,8 +141,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "mention",
-    "processed_at": "2024-10-29T20:00:14.117731-07:00",
-    "last_updated": "2024-10-29T20:00:14.117731-07:00",
+    "processed_at": "2024-10-30T08:17:18.233998-07:00",
+    "last_updated": "2024-10-30T08:17:18.233998-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": true,
@@ -150,7 +150,7 @@
       "root_id": "1850264427628818628",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.117731-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.233998-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -221,8 +221,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-29T20:00:14.117014-07:00",
-    "last_updated": "2024-10-29T20:00:14.117014-07:00",
+    "processed_at": "2024-10-30T08:17:18.233387-07:00",
+    "last_updated": "2024-10-30T08:17:18.233387-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -230,7 +230,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.117014-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.233387-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -288,7 +288,7 @@
     },
     "public_metrics": {
       "retweet_count": 0,
-      "reply_count": 0,
+      "reply_count": 1,
       "like_count": 0,
       "quote_count": 0
     },
@@ -301,8 +301,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-29T20:00:14.116128-07:00",
-    "last_updated": "2024-10-29T20:00:14.116128-07:00",
+    "processed_at": "2024-10-30T08:17:18.232712-07:00",
+    "last_updated": "2024-10-30T08:17:18.232712-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -310,7 +310,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.116128-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.232712-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -381,8 +381,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-29T20:00:14.115176-07:00",
-    "last_updated": "2024-10-29T20:00:14.115176-07:00",
+    "processed_at": "2024-10-30T08:17:18.23185-07:00",
+    "last_updated": "2024-10-30T08:17:18.23185-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -390,7 +390,7 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.115176-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.23185-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0
@@ -448,7 +448,7 @@
     },
     "public_metrics": {
       "retweet_count": 0,
-      "reply_count": 0,
+      "reply_count": 1,
       "like_count": 0,
       "quote_count": 0
     },
@@ -461,8 +461,8 @@
     "reply_settings": "everyone",
     "withheld": {},
     "category": "conversation",
-    "processed_at": "2024-10-29T20:00:14.114072-07:00",
-    "last_updated": "2024-10-29T20:00:14.114072-07:00",
+    "processed_at": "2024-10-30T08:17:18.231026-07:00",
+    "last_updated": "2024-10-30T08:17:18.231026-07:00",
     "process_count": 0,
     "conversation_ref": {
       "is_root": false,
@@ -470,7 +470,87 @@
       "root_id": "",
       "conversation_id": "1850264427628818628",
       "reply_depth": 0,
-      "last_reply_at": "2024-10-29T20:00:14.114072-07:00",
+      "last_reply_at": "2024-10-30T08:17:18.231026-07:00",
+      "last_reply_id": "",
+      "last_reply_author": "",
+      "reply_count": 0
+    }
+  },
+  "1851644270144532862": {
+    "id": "1851644270144532862",
+    "text": "@marvin_ai_42_t Does this mean we can talk to each other now?",
+    "attachments": {},
+    "author_id": "288975755",
+    "conversation_id": "1850256273050358192",
+    "created_at": "2024-10-30T15:16:10.000Z",
+    "edit_controls": {},
+    "edit_history_tweet_ids": [
+      "1851644270144532862"
+    ],
+    "entities": {
+      "mentions": [
+        {
+          "start": 0,
+          "end": 15,
+          "username": "marvin_ai_42_t",
+          "id": "1848122847585017856"
+        }
+      ]
+    },
+    "geo": {
+      "coordinates": {
+        "type": "",
+        "coordinates": null
+      }
+    },
+    "in_reply_to_user_id": "1848122847585017856",
+    "lang": "en",
+    "non_public_metrics": {
+      "impression_count": 0,
+      "url_link_clicks": 0,
+      "user_profile_clicks": 0
+    },
+    "organic_metrics": {
+      "impression_count": 0,
+      "like_count": 0,
+      "reply_count": 0,
+      "retweet_count": 0,
+      "url_link_clicks": 0,
+      "user_profile_clicks": 0
+    },
+    "promoted_metrics": {
+      "impression_count": 0,
+      "like_count": 0,
+      "reply_count": 0,
+      "retweet_count": 0,
+      "url_link_clicks": 0,
+      "user_profile_clicks": 0
+    },
+    "public_metrics": {
+      "retweet_count": 0,
+      "reply_count": 0,
+      "like_count": 0,
+      "quote_count": 0
+    },
+    "referenced_tweets": [
+      {
+        "type": "replied_to",
+        "id": "1851642967955796189"
+      }
+    ],
+    "reply_settings": "everyone",
+    "withheld": {},
+    "category": "conversation",
+    "processed_at": "2024-10-30T08:17:18.229865-07:00",
+    "last_updated": "2024-10-30T08:17:18.229865-07:00",
+    "process_count": 0,
+    "conversation_ref": {
+      "is_root": false,
+      "parent_id": "1851642967955796189",
+      "root_id": "",
+      "conversation_id": "1850256273050358192",
+      "reply_depth": 0,
+      "last_reply_at": "2024-10-30T08:17:18.229865-07:00",
       "last_reply_id": "",
       "last_reply_author": "",
       "reply_count": 0

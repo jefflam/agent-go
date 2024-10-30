@@ -6,6 +6,7 @@ import (
 
 	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
+	"github.com/lisanmuaddib/agent-go/pkg/memory"
 	"github.com/lisanmuaddib/agent-go/pkg/thoughts"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
@@ -15,6 +16,7 @@ type ActionConfig struct {
 	TwitterClient *twitter.TwitterClient
 	LLM           llms.Model
 	Logger        *logrus.Logger
+	TweetStore    *memory.TweetStore
 }
 
 // ConfigureActions sets up all agent actions
@@ -41,8 +43,24 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		},
 	)
 
+	tweetResponder := actions.NewTweetResponder(
+		config.TweetStore,
+		config.TwitterClient,
+		config.Logger,
+	)
+
+	tweetResponseAction := actions.NewTweetResponseAction(
+		tweetResponder,
+		config.Logger,
+		actions.TweetResponseOptions{
+			Interval:    60 * time.Second,
+			BatchConfig: actions.DefaultBatchConfig(),
+		},
+	)
+
 	return []actions.Action{
 		mentionsHandler,
 		thoughtAction,
+		tweetResponseAction,
 	}, nil
 }

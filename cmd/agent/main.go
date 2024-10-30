@@ -11,6 +11,8 @@ import (
 	agent "github.com/lisanmuaddib/agent-go/pkg"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
+	"github.com/lisanmuaddib/agent-go/pkg/logging"
+	"github.com/lisanmuaddib/agent-go/pkg/memory"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,9 +23,9 @@ func main() {
 		logrus.WithError(err).Warn("Error loading .env file")
 	}
 
-	// Initialize logger
+	// Initialize logger with colored formatter
 	log := logrus.New()
-	log.SetFormatter(&logrus.JSONFormatter{})
+	log.SetFormatter(logging.NewColoredJSONFormatter())
 
 	// Get log level from environment
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -66,6 +68,12 @@ func main() {
 		log.WithError(err).Fatal("Failed to create Twitter client")
 	}
 
+	// Initialize TweetStore
+	tweetStore, err := memory.NewTweetStore(log)
+	if err != nil {
+		log.Fatalf("Failed to initialize tweet store: %v", err)
+	}
+
 	// Initialize agent
 	agent, err := agent.New(agent.Config{
 		LLM:           llmClient.GetLLM(),
@@ -80,6 +88,7 @@ func main() {
 		TwitterClient: twitterClient,
 		LLM:           llmClient.GetLLM(),
 		Logger:        log,
+		TweetStore:    tweetStore,
 	})
 	if err != nil {
 		log.WithError(err).Fatal("Failed to configure actions")

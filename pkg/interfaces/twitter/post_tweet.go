@@ -63,11 +63,27 @@ func (c *TwitterClient) PostTweetAsync(ctx context.Context, text string, opts *T
 }
 
 func (c *TwitterClient) PostTweet(ctx context.Context, text string, opts *TweetOptions) (*Tweet, error) {
-	request := CreateTweetRequest{
-		BaseTweetRequest: buildBaseRequest(text, opts),
+	// Create the request body structure
+	requestBody := map[string]interface{}{
+		"text": text,
 	}
 
-	resp, err := c.makeRequest(ctx, http.MethodPost, c.config.TweetEndpoint, request)
+	// Add reply options if present
+	if opts != nil && opts.ReplyOptions != nil {
+		requestBody["reply"] = map[string]interface{}{
+			"in_reply_to_tweet_id": opts.ReplyOptions.InReplyToTweetId,
+		}
+	}
+
+	// Debug log the final request body
+	requestJSON, _ := json.MarshalIndent(requestBody, "", "  ")
+	logrus.WithFields(logrus.Fields{
+		"endpoint":     c.config.TweetEndpoint,
+		"request_body": string(requestJSON),
+	}).Debug("sending tweet request to Twitter API")
+
+	// Make the request
+	resp, err := c.makeRequest(ctx, http.MethodPost, c.config.TweetEndpoint, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to post tweet: %w", err)
 	}
@@ -87,6 +103,15 @@ func (c *TwitterClient) PostTweet(ctx context.Context, text string, opts *TweetO
 	tweet, err := tweetResp.UnmarshalTweet()
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal tweet: %w", err)
+	}
+
+	// Add thread verification logging
+	if resp.StatusCode == 201 {
+		logrus.WithFields(logrus.Fields{
+			"new_tweet_id":      tweet.ID,
+			"conversation_id":   tweet.ConversationID,
+			"referenced_tweets": tweet.ReferencedTweets,
+		}).Debug("Thread verification")
 	}
 
 	return tweet, nil

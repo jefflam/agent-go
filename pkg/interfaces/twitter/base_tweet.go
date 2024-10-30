@@ -50,13 +50,16 @@ type BaseTweetRequest struct {
 // BaseOptions contains common optional parameters for tweet operations
 // These options can be used to customize tweet creation and updates
 type BaseOptions struct {
-	ReplyTo               string  `json:"reply_to,omitempty"`        // ID of tweet to reply to
-	QuoteTweetID          string  `json:"quote_tweet_id,omitempty"`  // ID of tweet to quote
-	ConversationID        string  `json:"conversation_id,omitempty"` // Thread conversation ID
-	Poll                  *Poll   `json:"poll,omitempty"`            // Poll configuration
-	Media                 []Media `json:"media,omitempty"`           // Media attachments
-	ReplySettings         string  `json:"reply_settings,omitempty"`  // Reply permission settings
-	ForSuperFollowersOnly bool    `json:"for_super_followers_only"`  // Super followers only flag
+	ReplyTo               string            `json:"reply_to,omitempty"`        // ID of tweet to reply to
+	QuoteTweetID          string            `json:"quote_tweet_id,omitempty"`  // ID of tweet to quote
+	ConversationID        string            `json:"conversation_id,omitempty"` // Thread conversation ID
+	Poll                  *Poll             `json:"poll,omitempty"`            // Poll configuration
+	Media                 []Media           `json:"media,omitempty"`           // Media attachments
+	ReplySettings         string            `json:"reply_settings,omitempty"`  // Reply permission settings
+	ForSuperFollowersOnly bool              `json:"for_super_followers_only,omitempty"`
+	ReplyOptions          *ReplyOptions     `json:"reply,omitempty"`
+	QuoteOptions          *QuoteOptions     `json:"quote,omitempty"`
+	ReferencedTweets      []ReferencedTweet `json:"referenced_tweets,omitempty"`
 }
 
 // buildBaseRequest creates a BaseTweetRequest from text and options

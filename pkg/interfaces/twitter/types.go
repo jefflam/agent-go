@@ -441,3 +441,31 @@ func (e *TwitterErrorResponse) Error() string {
 	}
 	return fmt.Sprintf("twitter API error: %s (code: %d)", e.Errors[0].Message, e.Errors[0].Code)
 }
+
+// ReplyOptions contains options specific to reply tweets
+type ReplyOptions struct {
+	InReplyToTweetId    string   `json:"in_reply_to_tweet_id"`
+	ExcludeReplyUserIds []string `json:"exclude_reply_user_ids,omitempty"`
+}
+
+// QuoteOptions contains options for quote tweets
+type QuoteOptions struct {
+	QuoteTweetId string `json:"quote_tweet_id"`
+}
+
+// PollOptions contains options for creating polls
+type PollOptions struct {
+	DurationMinutes int      `json:"duration_minutes"`
+	Options         []string `json:"options"`
+}
+
+// MediaOptions contains options for media attachments
+type MediaOptions struct {
+	MediaIds      []string `json:"media_ids"`
+	TaggedUserIds []string `json:"tagged_user_ids,omitempty"`
+}
+
+type ReferencedTweet struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}

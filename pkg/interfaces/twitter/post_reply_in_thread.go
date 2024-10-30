@@ -2,6 +2,7 @@ package twitter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -45,8 +46,25 @@ func (c *TwitterClient) PostReplyThread(ctx context.Context, params PostReplyThr
 
 	// Create the reply with thread information
 	opts := &BaseOptions{
-		ReplyTo:        params.ReplyToID,
-		ConversationID: params.ConversationID,
+		ReplyOptions: &ReplyOptions{
+			InReplyToTweetId: params.ReplyToID,
+		},
+	}
+
+	// Log the request body before sending
+	requestBody := map[string]interface{}{
+		"text":  params.Text,
+		"reply": opts.ReplyOptions,
+	}
+
+	requestJSON, err := json.MarshalIndent(requestBody, "", "  ")
+	if err != nil {
+		log.WithError(err).Error("failed to marshal request body for logging")
+	} else {
+		log.WithFields(logrus.Fields{
+			"request_body": string(requestJSON),
+			"reply_to_id":  params.ReplyToID,
+		}).Debug("Sending tweet reply request")
 	}
 
 	tweet, err := c.PostTweet(ctx, params.Text, opts)
