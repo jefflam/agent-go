@@ -1,0 +1,307 @@
+package masatwitter
+
+import "time"
+
+type (
+	// Mention type.
+	Mention struct {
+		ID       string
+		Username string
+		Name     string
+	}
+
+	// Photo type.
+	Photo struct {
+		ID  string
+		URL string
+	}
+
+	// Video type.
+	Video struct {
+		ID      string
+		Preview string
+		URL     string
+		HLSURL  string
+	}
+
+	// GIF type.
+	GIF struct {
+		ID      string
+		Preview string
+		URL     string
+	}
+
+	// Tweet type.
+	Tweet struct {
+		ConversationID    string    `json:"conversation_id"`
+		GIFs              []GIF     `json:"gifs,omitempty"`
+		Hashtags          []string  `json:"hashtags,omitempty"`
+		HTML              string    `json:"html"`
+		ID                string    `json:"id"`
+		InReplyToStatus   *Tweet    `json:"in_reply_to_status,omitempty"`
+		InReplyToStatusID string    `json:"in_reply_to_status_id"`
+		IsQuoted          bool      `json:"is_quoted"`
+		IsPin             bool      `json:"is_pin"`
+		IsReply           bool      `json:"is_reply"`
+		IsRetweet         bool      `json:"is_retweet"`
+		IsSelfThread      bool      `json:"is_self_thread"`
+		Likes             int       `json:"likes"`
+		Name              string    `json:"name"`
+		Mentions          []Mention `json:"mentions,omitempty"`
+		PermanentURL      string    `json:"permanent_url"`
+		Photos            []Photo   `json:"photos,omitempty"`
+		Place             *Place    `json:"place,omitempty"`
+		QuotedStatus      *Tweet    `json:"quoted_status,omitempty"`
+		QuotedStatusID    string    `json:"quoted_status_id"`
+		Replies           int       `json:"replies"`
+		Retweets          int       `json:"retweets"`
+		RetweetedStatus   *Tweet    `json:"retweeted_status,omitempty"`
+		RetweetedStatusID string    `json:"retweeted_status_id"`
+		Text              string    `json:"text"`
+		Thread            []*Tweet  `json:"thread,omitempty"`
+		TimeParsed        time.Time `json:"time_parsed"`
+		Timestamp         int64     `json:"timestamp"`
+		URLs              []string  `json:"urls,omitempty"`
+		UserID            string    `json:"user_id"`
+		Username          string    `json:"username"`
+		Videos            []Video   `json:"videos,omitempty"`
+		Views             int       `json:"views"`
+		SensitiveContent  bool      `json:"sensitive_content"`
+	}
+
+	// ProfileResult represents the result of profile scraping.
+	ProfileResult struct {
+		Profile Profile
+		Error   error
+	}
+
+	// TweetResult represents the result of tweet scraping.
+	TweetResult struct {
+		Tweet
+		Error error
+	}
+
+	ScheduledTweet struct {
+		ID        string
+		State     string
+		ExecuteAt time.Time
+		Text      string
+		Videos    []Video
+		Photos    []Photo
+		GIFs      []GIF
+	}
+
+	legacyTweet struct {
+		ConversationIDStr string `json:"conversation_id_str"`
+		CreatedAt         string `json:"created_at"`
+		FavoriteCount     int    `json:"favorite_count"`
+		FullText          string `json:"full_text"`
+		Entities          struct {
+			Hashtags []struct {
+				Text string `json:"text"`
+			} `json:"hashtags"`
+			Media []struct {
+				MediaURLHttps string `json:"media_url_https"`
+				Type          string `json:"type"`
+				URL           string `json:"url"`
+			} `json:"media"`
+			URLs []struct {
+				ExpandedURL string `json:"expanded_url"`
+				URL         string `json:"url"`
+			} `json:"urls"`
+			UserMentions []struct {
+				IDStr      string `json:"id_str"`
+				Name       string `json:"name"`
+				ScreenName string `json:"screen_name"`
+			} `json:"user_mentions"`
+		} `json:"entities"`
+		ExtendedEntities struct {
+			Media []struct {
+				IDStr                    string `json:"id_str"`
+				MediaURLHttps            string `json:"media_url_https"`
+				ExtSensitiveMediaWarning struct {
+					AdultContent    bool `json:"adult_content"`
+					GraphicViolence bool `json:"graphic_violence"`
+					Other           bool `json:"other"`
+				} `json:"ext_sensitive_media_warning"`
+				Type      string `json:"type"`
+				URL       string `json:"url"`
+				VideoInfo struct {
+					Variants []struct {
+						Type    string `json:"content_type"`
+						Bitrate int    `json:"bitrate"`
+						URL     string `json:"url"`
+					} `json:"variants"`
+				} `json:"video_info"`
+			} `json:"media"`
+		} `json:"extended_entities"`
+		IDStr                 string `json:"id_str"`
+		InReplyToStatusIDStr  string `json:"in_reply_to_status_id_str"`
+		Place                 Place  `json:"place"`
+		ReplyCount            int    `json:"reply_count"`
+		RetweetCount          int    `json:"retweet_count"`
+		RetweetedStatusIDStr  string `json:"retweeted_status_id_str"`
+		RetweetedStatusResult struct {
+			Result *result `json:"result"`
+		} `json:"retweeted_status_result"`
+		QuotedStatusIDStr string `json:"quoted_status_id_str"`
+		SelfThread        struct {
+			IDStr string `json:"id_str"`
+		} `json:"self_thread"`
+		Time      time.Time `json:"time"`
+		UserIDStr string    `json:"user_id_str"`
+		Views     struct {
+			State string `json:"state"`
+			Count string `json:"count"`
+		} `json:"ext_views"`
+	}
+
+	legacyUser struct {
+		CreatedAt   string `json:"created_at"`
+		Description string `json:"description"`
+		Entities    struct {
+			URL struct {
+				Urls []struct {
+					ExpandedURL string `json:"expanded_url"`
+				} `json:"urls"`
+			} `json:"url"`
+		} `json:"entities"`
+		FavouritesCount      int      `json:"favourites_count"`
+		FollowersCount       int      `json:"followers_count"`
+		FriendsCount         int      `json:"friends_count"`
+		IDStr                string   `json:"id_str"`
+		ListedCount          int      `json:"listed_count"`
+		Name                 string   `json:"name"`
+		Location             string   `json:"location"`
+		PinnedTweetIdsStr    []string `json:"pinned_tweet_ids_str"`
+		ProfileBannerURL     string   `json:"profile_banner_url"`
+		ProfileImageURLHTTPS string   `json:"profile_image_url_https"`
+		Protected            bool     `json:"protected"`
+		ScreenName           string   `json:"screen_name"`
+		StatusesCount        int      `json:"statuses_count"`
+		Verified             bool     `json:"verified"`
+		FollowedBy           bool     `json:"followed_by"`
+		Following            bool     `json:"following"`
+	}
+
+	legacyUserV2 struct {
+		FollowedBy          bool   `json:"followed_by"`
+		Following           bool   `json:"following"`
+		CanDm               bool   `json:"can_dm"`
+		CanMediaTag         bool   `json:"can_media_tag"`
+		CreatedAt           string `json:"created_at"`
+		DefaultProfile      bool   `json:"default_profile"`
+		DefaultProfileImage bool   `json:"default_profile_image"`
+		Description         string `json:"description"`
+		Entities            struct {
+			Description struct {
+				Urls []interface{} `json:"urls"`
+			} `json:"description"`
+			URL struct {
+				Urls []struct {
+					DisplayURL  string `json:"display_url"`
+					ExpandedURL string `json:"expanded_url"`
+					URL         string `json:"url"`
+					Indices     []int  `json:"indices"`
+				} `json:"urls"`
+			} `json:"url"`
+		} `json:"entities"`
+		FastFollowersCount      int           `json:"fast_followers_count"`
+		FavouritesCount         int           `json:"favourites_count"`
+		FollowersCount          int           `json:"followers_count"`
+		FriendsCount            int           `json:"friends_count"`
+		HasCustomTimelines      bool          `json:"has_custom_timelines"`
+		IsTranslator            bool          `json:"is_translator"`
+		ListedCount             int           `json:"listed_count"`
+		Location                string        `json:"location"`
+		MediaCount              int           `json:"media_count"`
+		Name                    string        `json:"name"`
+		NormalFollowersCount    int           `json:"normal_followers_count"`
+		PinnedTweetIdsStr       []string      `json:"pinned_tweet_ids_str"`
+		PossiblySensitive       bool          `json:"possibly_sensitive"`
+		ProfileBannerURL        string        `json:"profile_banner_url"`
+		ProfileImageURLHTTPS    string        `json:"profile_image_url_https"`
+		ProfileInterstitialType string        `json:"profile_interstitial_type"`
+		ScreenName              string        `json:"screen_name"`
+		StatusesCount           int           `json:"statuses_count"`
+		TranslatorType          string        `json:"translator_type"`
+		URL                     string        `json:"url"`
+		Verified                bool          `json:"verified"`
+		WantRetweets            bool          `json:"want_retweets"`
+		WithheldInCountries     []interface{} `json:"withheld_in_countries"`
+	}
+
+	Place struct {
+		ID          string `json:"id"`
+		PlaceType   string `json:"place_type"`
+		Name        string `json:"name"`
+		FullName    string `json:"full_name"`
+		CountryCode string `json:"country_code"`
+		Country     string `json:"country"`
+		BoundingBox struct {
+			Type        string        `json:"type"`
+			Coordinates [][][]float64 `json:"coordinates"`
+		} `json:"bounding_box"`
+	}
+
+	fetchProfileFunc func(query string, maxProfilesNbr int, cursor string) ([]*Profile, string, error)
+	fetchTweetFunc   func(query string, maxTweetsNbr int, cursor string) ([]*Tweet, string, error)
+)
+
+// Profile of twitter user.
+type Profile struct {
+	Avatar         string
+	Banner         string
+	Biography      string
+	Birthday       string
+	FollowersCount int
+	FollowingCount int
+	FriendsCount   int
+	IsPrivate      bool
+	IsVerified     bool
+	Joined         *time.Time
+	LikesCount     int
+	ListedCount    int
+	Location       string
+	Name           string
+	PinnedTweetIDs []string
+	TweetsCount    int
+	URL            string
+	UserID         string
+	Username       string
+	Website        string
+	Sensitive      bool
+	Following      bool
+	FollowedBy     bool
+}
+
+type result struct {
+	Typename string `json:"__typename"`
+	tweet
+	Tweet tweet `json:"tweet"`
+}
+
+type tweet struct {
+	Core struct {
+		UserResults struct {
+			Result struct {
+				IsBlueVerified bool       `json:"is_blue_verified"`
+				Legacy         legacyUser `json:"legacy"`
+			} `json:"result"`
+		} `json:"user_results"`
+	} `json:"core"`
+	Views struct {
+		Count string `json:"count"`
+	} `json:"views"`
+	NoteTweet struct {
+		NoteTweetResults struct {
+			Result struct {
+				Text string `json:"text"`
+			} `json:"result"`
+		} `json:"note_tweet_results"`
+	} `json:"note_tweet"`
+	QuotedStatusResult struct {
+		Result *result `json:"result"`
+	} `json:"quoted_status_result"`
+	Legacy legacyTweet `json:"legacy"`
+}

@@ -26,7 +26,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.LLM,
 		config.Logger,
 		actions.MentionsOptions{
-			Interval:   30 * time.Second,
+			Interval:   2 * time.Minute,
 			MaxResults: 100,
 		},
 	)
@@ -56,7 +56,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		tweetResponder,
 		config.Logger,
 		actions.TweetResponseOptions{
-			Interval:    60 * time.Second,
+			Interval:    5 * time.Minute,
 			BatchConfig: actions.DefaultBatchConfig(),
 		},
 	)

@@ -1,0 +1,16 @@
+{
+    "queries": [
+        {
+            "query": "Trump",
+            "count": 2,
+            "startDate": "2024-11-03",
+            "endDate": "2024-11-06"
+        },
+        {
+            "query": "$BTC",
+            "count": 2,
+            "startDate": "2024-11-03",
+            "endDate": "2024-11-06"
+        }
+    ]
+}
