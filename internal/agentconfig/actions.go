@@ -25,6 +25,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.TwitterClient,
 		config.LLM,
 		config.Logger,
+		config.TweetStore,
 		actions.MentionsOptions{
 			Interval:   2 * time.Minute,
 			MaxResults: 100,

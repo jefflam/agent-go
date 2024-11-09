@@ -16,11 +16,12 @@ import (
 // Scraper handles Twitter data scraping with concurrent workers and retry logic.
 // It maintains internal state of tasks and provides status reporting.
 type Scraper struct {
-	client *masatwitter.Client
-	logger *logrus.Logger
-	tasks  map[string]*Task
-	status ScraperStatus
-	mu     sync.RWMutex
+	client    *masatwitter.Client
+	logger    *logrus.Logger
+	processor *TweetProcessor
+	tasks     map[string]*Task
+	status    ScraperStatus
+	mu        sync.RWMutex
 }
 
 // NewScraper creates a new Scraper instance with the provided Twitter client and logger.
@@ -30,8 +31,9 @@ func NewScraper(client *masatwitter.Client, logger *logrus.Logger) *Scraper {
 		"client": fmt.Sprintf("%T", client),
 	}).Debug("Creating new Scraper instance")
 	return &Scraper{
-		client: client,
-		logger: logger,
+		client:    client,
+		logger:    logger,
+		processor: NewTweetProcessor(logger),
 	}
 }
 
@@ -223,7 +225,7 @@ func (s *Scraper) worker(id int, tasks <-chan *Task, results chan<- *Task) {
 		}
 
 		// Process tweets and mark task as complete
-		s.processTweets(tweets)
+		s.processor.ProcessTweets(tweets)
 
 		task.Status = TaskStatusComplete
 		task.LastAttempt = time.Now()
@@ -236,36 +238,6 @@ func (s *Scraper) worker(id int, tasks <-chan *Task, results chan<- *Task) {
 
 		results <- task
 	}
-}
-
-// processTweets handles the processing of retrieved tweets, including logging
-// detailed information about each tweet in the batch.
-func (s *Scraper) processTweets(tweets []masatwitter.Tweet) {
-	s.logger.WithFields(logrus.Fields{
-		"tweet_count": len(tweets),
-		"start_time":  time.Now().Format(time.RFC3339),
-	}).Info("Processing batch of tweets")
-
-	for _, tweet := range tweets {
-		s.logger.WithFields(logrus.Fields{
-			"tweet_id":        tweet.ID,
-			"author_id":       tweet.UserID,
-			"created_at":      tweet.TimeParsed.Format(time.RFC3339),
-			"text":            tweet.Text,
-			"conversation_id": tweet.ConversationID,
-			"is_reply":        tweet.IsReply,
-			"is_retweet":      tweet.IsRetweet,
-			"is_quoted":       tweet.IsQuoted,
-			"likes":           tweet.Likes,
-			"retweets":        tweet.Retweets,
-			"replies":         tweet.Replies,
-		}).Info("Tweet details")
-	}
-
-	s.logger.WithFields(logrus.Fields{
-		"tweet_count": len(tweets),
-		"end_time":    time.Now().Format(time.RFC3339),
-	}).Info("Completed processing batch of tweets")
 }
 
 // Status provides thread-safe access to the current scraper status through a callback function.

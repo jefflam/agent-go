@@ -15,10 +15,15 @@ var DefaultReplyPersonality = traits.BasePromptSections
 
 // MentionReplyConfig holds configuration for reply generation
 type MentionReplyConfig struct {
-	TweetText   string
-	MaxLength   int
-	Temperature float64
-	Personality map[string]string // Optional: will use DefaultReplyPersonality if nil
+	TweetText           string            `json:"tweet_text"`
+	ConversationContext string            `json:"conversation_context"` // Optional: for thread context
+	MaxLength           int               `json:"max_length"`
+	Temperature         float64           `json:"temperature"`
+	AuthorUsername      string            `json:"author_username,omitempty"` // Optional: for better context
+	AuthorName          string            `json:"author_name,omitempty"`     // Optional: for better context
+	Category            string            `json:"category,omitempty"`        // Optional: type of interaction
+	Language            string            `json:"language,omitempty"`        // Optional: for language support
+	Personality         map[string]string // Optional: will use DefaultReplyPersonality if nil
 }
 
 type MentionReplyGenerator interface {
@@ -42,21 +47,17 @@ func (g *DefaultMentionReplyGenerator) GenerateReply(ctx context.Context, config
 		personality = DefaultReplyPersonality
 	}
 
+	// Use enhanced prompt if conversation context is available
+	var promptTemplate string
+	if config.ConversationContext != "" {
+		promptTemplate = conversationalReplyPrompt
+	} else {
+		promptTemplate = standardReplyPrompt
+	}
+
 	replyPrompt := langchainprompts.NewPromptTemplate(
-		`You are responding to a tweet. Here is your personality:
-
-{{.personality}}
-
-Tweet to respond to: {{.tweet}}
-
-Requirements:
-1. Your reply MUST be under {{.maxLength}} characters
-2. Stay in character
-3. Be engaging and memorable
-4. Respond directly to the tweet's content
-
-Your reply:`,
-		[]string{"personality", "tweet", "maxLength"},
+		promptTemplate,
+		[]string{"personality", "tweet", "maxLength", "context", "authorUsername", "authorName", "category", "language"},
 	)
 
 	// Format personality traits into a string
@@ -65,11 +66,29 @@ Your reply:`,
 		personalityText.WriteString(fmt.Sprintf("\n%s:\n%s\n", section, content))
 	}
 
-	formattedPrompt, err := replyPrompt.Format(map[string]any{
+	// Prepare prompt data with optional fields
+	promptData := map[string]any{
 		"personality": personalityText.String(),
 		"tweet":       config.TweetText,
 		"maxLength":   config.MaxLength,
-	})
+		"context":     config.ConversationContext,
+	}
+
+	// Add optional fields if present
+	if config.AuthorUsername != "" {
+		promptData["authorUsername"] = config.AuthorUsername
+	}
+	if config.AuthorName != "" {
+		promptData["authorName"] = config.AuthorName
+	}
+	if config.Category != "" {
+		promptData["category"] = config.Category
+	}
+	if config.Language != "" {
+		promptData["language"] = config.Language
+	}
+
+	formattedPrompt, err := replyPrompt.Format(promptData)
 	if err != nil {
 		return "", fmt.Errorf("error formatting reply prompt: %w", err)
 	}
@@ -84,3 +103,42 @@ Your reply:`,
 
 	return reply, nil
 }
+
+// standardReplyPrompt is the original prompt template for backward compatibility
+const standardReplyPrompt = `You are responding to a tweet. Here is your personality:
+
+{{.personality}}
+
+Tweet to respond to: {{.tweet}}
+
+Requirements:
+1. Your reply MUST be under {{.maxLength}} characters
+2. Stay in character
+3. Be engaging and memorable
+4. Respond directly to the tweet's content
+
+Your reply:`
+
+// conversationalReplyPrompt is the enhanced prompt template for conversation context
+const conversationalReplyPrompt = `You are responding to a tweet conversation. Here is your personality:
+
+{{.personality}}
+
+CONVERSATION CONTEXT:
+{{.context}}
+
+Tweet to respond to: {{.tweet}}
+{{if .authorUsername}}From: @{{.authorUsername}}{{if .authorName}} ({{.authorName}}){{end}}{{end}}
+{{if .category}}Interaction type: {{.category}}{{end}}
+{{if .language}}Language: {{.language}}{{end}}
+
+Requirements:
+1. Your reply MUST be under {{.maxLength}} characters
+2. Stay in character
+3. Be engaging and memorable
+4. Consider the full conversation context
+5. Maintain conversation flow
+6. Use appropriate emojis when relevant
+{{if .language}}7. Respond in the specified language{{end}}
+
+Your reply:`

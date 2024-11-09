@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS tweets;
+DROP TYPE IF EXISTS tweet_category;

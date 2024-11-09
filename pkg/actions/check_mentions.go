@@ -26,18 +26,13 @@ type MentionsOptions struct {
 	MaxResults int
 }
 
-func NewMentionsHandler(client *twitter.TwitterClient, llm llms.Model, logger *logrus.Logger, options MentionsOptions) (*MentionsHandler, error) {
+// NewMentionsHandler creates a new instance of MentionsHandler
+func NewMentionsHandler(client *twitter.TwitterClient, llm llms.Model, logger *logrus.Logger, tweetStore *memory.TweetStore, options MentionsOptions) (*MentionsHandler, error) {
 	if options.Interval == 0 {
 		options.Interval = 30 * time.Second
 	}
 	if options.MaxResults == 0 {
 		options.MaxResults = 100
-	}
-
-	// Initialize tweet store
-	tweetStore, err := memory.NewTweetStore(logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tweet store: %w", err)
 	}
 
 	return &MentionsHandler{
@@ -155,22 +150,70 @@ func (h *MentionsHandler) processMentions(ctx context.Context, resp *twitter.Men
 				"reply_settings":  tweet.ReplySettings,
 			})
 
+			// Find author information from includes
+			var authorName, authorUsername string
+			if resp.Includes != nil {
+				for _, user := range resp.Includes.Users {
+					if user.ID == tweet.AuthorID {
+						authorName = user.Name
+						authorUsername = user.Username
+						break
+					}
+				}
+			}
+
 			// Determine the category of the tweet
 			category := memory.DetermineTweetCategory(tweet)
+
+			// Prepare conversation reference
+			var conversationRef *memory.ConversationRef
+			if tweet.ConversationID != "" {
+				conversationRef = &memory.ConversationRef{
+					ConversationID: tweet.ConversationID,
+					LastReplyAt:    time.Now(),
+				}
+
+				if tweet.ReferencedTweets != nil {
+					for _, ref := range tweet.ReferencedTweets {
+						if ref.Type == "replied_to" {
+							conversationRef.ParentID = ref.ID
+							conversationRef.IsRoot = false
+							log.WithField("parent_id", ref.ID).Debug("Found parent tweet reference")
+							break
+						}
+					}
+				} else {
+					conversationRef.IsRoot = true
+					conversationRef.RootID = tweet.ID
+					log.Debug("Tweet marked as conversation root")
+				}
+			}
 
 			// Log before saving
 			log.WithFields(logrus.Fields{
 				"category":            category,
 				"has_conversation_id": tweet.ConversationID != "",
+				"author_name":         authorName,
+				"author_username":     authorUsername,
+				"conversation_ref":    conversationRef,
+				"referenced_tweets":   tweet.ReferencedTweets,
+				"public_metrics":      tweet.PublicMetrics,
 			}).Debug("Saving tweet to store")
 
 			// Store the tweet with all its metadata
-			if err := h.tweetStore.SaveTweet(tweet, category); err != nil {
+			if err := h.tweetStore.SaveTweet(tweet, category, authorName, authorUsername); err != nil {
 				log.WithError(err).Error("Failed to save tweet")
 				continue
 			}
 
-			log.Info("Processed mention")
+			log.WithFields(logrus.Fields{
+				"category":     category,
+				"author_name":  authorName,
+				"username":     authorUsername,
+				"tweet_id":     tweet.ID,
+				"needs_reply":  true,
+				"is_processed": true,
+			}).Info("Processed mention")
 		}
 	}
 

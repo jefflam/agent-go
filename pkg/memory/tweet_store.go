@@ -1,14 +1,14 @@
 package memory
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TweetCategory represents different types of tweets we store
@@ -26,11 +26,13 @@ const (
 // StoredTweet extends the twitter.Tweet with processing metadata
 type StoredTweet struct {
 	twitter.Tweet                    // Embeds all standard Tweet fields (includes AuthorID, metrics, etc)
-	Category        TweetCategory    `json:"category"`
-	ProcessedAt     time.Time        `json:"processed_at"`
-	LastUpdated     time.Time        `json:"last_updated"`
-	ProcessCount    int              `json:"process_count"`
-	ConversationRef *ConversationRef `json:"conversation_ref,omitempty"`
+	Category        TweetCategory    `json:"category" gorm:"column:category"`
+	ProcessedAt     time.Time        `json:"processed_at" gorm:"column:processed_at"`
+	LastUpdated     time.Time        `json:"last_updated" gorm:"column:last_updated"`
+	ProcessCount    int              `json:"process_count" gorm:"column:process_count"`
+	ConversationRef *ConversationRef `json:"conversation_ref" gorm:"column:conversation_ref;type:jsonb"`
+	AuthorName      string           `json:"author_name" gorm:"column:author_name"`
+	AuthorUsername  string           `json:"author_username" gorm:"column:author_username"`
 }
 
 // ConversationRef holds metadata about the tweet's place in a conversation
@@ -47,66 +49,47 @@ type ConversationRef struct {
 }
 
 type TweetStore struct {
-	mu       sync.RWMutex
-	filepath string
-	logger   *logrus.Logger
-	tweets   map[string]StoredTweet // Using tweet ID as key prevents duplicates
+	mu     sync.RWMutex
+	logger *logrus.Logger
+	db     *gorm.DB
 }
 
-func NewTweetStore(logger *logrus.Logger) (*TweetStore, error) {
-	filepath := "data/tweets/tweets.json"
-	store := &TweetStore{
-		filepath: filepath,
-		logger:   logger,
-		tweets:   make(map[string]StoredTweet),
-	}
-	// Create data directory if it doesn't exist
-	if err := os.MkdirAll("data/tweets", 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %w", err)
-	}
-
-	// Load existing tweets
-	if err := store.load(); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to load tweet store: %w", err)
-	}
-
-	return store, nil
+func NewTweetStore(logger *logrus.Logger, db *gorm.DB) (*TweetStore, error) {
+	return &TweetStore{
+		logger: logger,
+		db:     db,
+	}, nil
 }
 
-func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory) error {
+func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory, authorName, authorUsername string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.logger.WithFields(logrus.Fields{
-		"tweet_id":            tweet.ID,
-		"raw_conversation_id": tweet.ConversationID,
-		"text":                tweet.Text,
-		"category":            category,
+		"tweet_id":        tweet.ID,
+		"conversation_id": tweet.ConversationID,
+		"text":            tweet.Text,
+		"category":        category,
+		"author_id":       tweet.AuthorID,
+		"author_name":     authorName,
+		"author_username": authorUsername,
 	}).Debug("Attempting to save tweet")
 
 	now := time.Now()
 
-	// Create stored tweet with all fields
-	storedTweet := StoredTweet{
-		Tweet:       tweet,
-		Category:    category,
-		ProcessedAt: now,
-		LastUpdated: now,
-	}
-
-	// Add more detailed logging for conversation handling
+	// Prepare conversation ref if exists
+	var conversationRef *ConversationRef
 	if tweet.ConversationID != "" {
 		s.logger.WithFields(logrus.Fields{
 			"tweet_id":        tweet.ID,
 			"conversation_id": tweet.ConversationID,
 		}).Debug("Processing tweet with conversation ID")
 
-		conversationRef := &ConversationRef{
+		conversationRef = &ConversationRef{
 			ConversationID: tweet.ConversationID,
 			LastReplyAt:    now,
 		}
 
-		// Check if this is a reply
 		if tweet.ReferencedTweets != nil {
 			s.logger.WithField("referenced_tweets", tweet.ReferencedTweets).Debug("Tweet has referenced tweets")
 			for _, ref := range tweet.ReferencedTweets {
@@ -120,43 +103,64 @@ func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory) erro
 				}
 			}
 		} else {
-			// If no referenced tweets, this might be the root
 			conversationRef.IsRoot = true
 			conversationRef.RootID = tweet.ID
 			s.logger.Debug("Tweet marked as conversation root")
 		}
-
-		storedTweet.ConversationRef = conversationRef
-	} else {
-		s.logger.WithField("tweet_id", tweet.ID).Debug("Tweet has no conversation ID")
 	}
 
-	// Verify the stored tweet before saving
-	s.logger.WithFields(logrus.Fields{
-		"tweet_id":         tweet.ID,
-		"has_conversation": storedTweet.ConversationID != "",
-		"has_conv_ref":     storedTweet.ConversationRef != nil,
-		"category":         storedTweet.Category,
-	}).Debug("About to store tweet")
-
-	// Store the tweet
-	s.tweets[tweet.ID] = storedTweet
-
-	// Save to disk
-	if err := s.save(); err != nil {
-		return fmt.Errorf("failed to save tweet store: %w", err)
+	// Convert to database model
+	storedTweet := StoredTweet{
+		Tweet:           tweet,
+		Category:        category,
+		ProcessedAt:     now,
+		LastUpdated:     now,
+		AuthorName:      authorName,
+		AuthorUsername:  authorUsername,
+		ConversationRef: conversationRef,
 	}
 
-	// Log successful save with full details
+	// Upsert the tweet
+	result := s.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"text",
+			"conversation_id",
+			"author_name",
+			"author_username",
+			"category",
+			"last_updated",
+			"conversation_ref",
+			"process_count",
+			"attachments",
+			"context_annotations",
+			"edit_controls",
+			"edit_history_tweet_ids",
+			"entities",
+			"geo",
+			"lang",
+			"possibly_sensitive",
+			"public_metrics",
+			"referenced_tweets",
+			"reply_settings",
+			"source",
+			"withheld",
+		}),
+	}).Create(&storedTweet)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to save tweet: %w", result.Error)
+	}
+
 	s.logger.WithFields(logrus.Fields{
 		"tweet_id":          tweet.ID,
 		"conversation_id":   tweet.ConversationID,
 		"category":          category,
 		"public_metrics":    tweet.PublicMetrics,
 		"referenced_tweets": tweet.ReferencedTweets,
-		"stored_conv_id":    s.tweets[tweet.ID].ConversationID,
-		"has_conv_ref":      s.tweets[tweet.ID].ConversationRef != nil,
-	}).Info("Successfully saved tweet to store")
+		"author_name":       storedTweet.AuthorName,
+		"author_username":   storedTweet.AuthorUsername,
+	}).Info("Successfully saved tweet to database")
 
 	return nil
 }
@@ -165,8 +169,9 @@ func (s *TweetStore) GetTweet(id string) (*StoredTweet, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	tweet, ok := s.tweets[id]
-	if !ok {
+	var tweet StoredTweet
+	result := s.db.Where("id = ?", id).First(&tweet)
+	if result.Error != nil {
 		return nil, fmt.Errorf("tweet not found: %s", id)
 	}
 
@@ -178,12 +183,7 @@ func (s *TweetStore) GetTweetsByCategory(category TweetCategory) []StoredTweet {
 	defer s.mu.RUnlock()
 
 	var tweets []StoredTweet
-	for _, tweet := range s.tweets {
-		if tweet.Category == category {
-			tweets = append(tweets, tweet)
-		}
-	}
-
+	s.db.Where("category = ?", category).Find(&tweets)
 	return tweets
 }
 
@@ -191,66 +191,9 @@ func (s *TweetStore) GetConversation(conversationID string) []StoredTweet {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var conversation []StoredTweet
-	for _, tweet := range s.tweets {
-		if tweet.ConversationID == conversationID {
-			conversation = append(conversation, tweet)
-		}
-	}
-
-	return conversation
-}
-
-func (s *TweetStore) load() error {
-	s.logger.WithField("filepath", s.filepath).Debug("Loading tweets from file")
-
-	data, err := os.ReadFile(s.filepath)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to read tweets file")
-		return err
-	}
-
-	s.logger.WithField("data_size", len(data)).Debug("Read tweets file")
-
-	err = json.Unmarshal(data, &s.tweets)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to unmarshal tweets")
-		return err
-	}
-
-	s.logger.WithField("tweets_loaded", len(s.tweets)).Info("Successfully loaded tweets from file")
-
-	// Log a few tweet IDs for verification
-	var tweetIDs []string
-	for id := range s.tweets {
-		tweetIDs = append(tweetIDs, id)
-		if len(tweetIDs) >= 3 {
-			break
-		}
-	}
-	s.logger.WithField("sample_tweet_ids", tweetIDs).Debug("Sample of loaded tweets")
-
-	return nil
-}
-
-func (s *TweetStore) save() error {
-	data, err := json.MarshalIndent(s.tweets, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal tweets: %w", err)
-	}
-
-	tempFile := s.filepath + ".tmp"
-	if err := os.WriteFile(tempFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write temporary file: %w", err)
-	}
-
-	// Atomic rename for safer file writes
-	if err := os.Rename(tempFile, s.filepath); err != nil {
-		os.Remove(tempFile) // Clean up temp file if rename fails
-		return fmt.Errorf("failed to save tweet store: %w", err)
-	}
-
-	return nil
+	var tweets []StoredTweet
+	s.db.Where("conversation_id = ?", conversationID).Find(&tweets)
+	return tweets
 }
 
 // Helper method to determine tweet category based on tweet content

@@ -70,22 +70,22 @@ func NewTweetResponder(
 func (tr *TweetResponder) ProcessTweetsNeedingReply(ctx context.Context) error {
 	log := tr.logger.WithField("method", "ProcessTweetsNeedingReply")
 
-	tweets, err := tr.tweetStore.RecallTweetsNeedingReply(ctx, tr.client)
+	threads, err := tr.tweetStore.RecallTweetsNeedingReply(ctx, tr.client)
 	if err != nil {
 		return fmt.Errorf("failed to recall tweets needing reply: %w", err)
 	}
 
-	log.WithField("tweets_count", len(tweets)).Info("Found tweets needing reply")
+	log.WithField("threads_count", len(threads)).Info("Found conversation threads needing reply")
 
-	// Create a channel for processing tweets with a buffer
-	tweetChan := make(chan memory.TweetNeedingReply, len(tweets))
-	for _, tweet := range tweets {
-		tweetChan <- tweet
+	// Create a channel for processing conversation threads with a buffer
+	threadChan := make(chan memory.ConversationThread, len(threads))
+	for _, thread := range threads {
+		threadChan <- thread
 	}
-	close(tweetChan)
+	close(threadChan)
 
-	// Process tweets with rate limiting
-	for tweet := range tweetChan {
+	// Process threads with rate limiting
+	for thread := range threadChan {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -97,21 +97,20 @@ func (tr *TweetResponder) ProcessTweetsNeedingReply(ctx context.Context) error {
 				continue
 			}
 
-			if err := tr.handleSingleReply(ctx, tweet); err != nil {
+			if err := tr.handleSingleReply(ctx, thread); err != nil {
 				log.WithError(err).WithFields(logrus.Fields{
-					"tweet_id": tweet.TweetID,
-					"error":    err,
+					"conversation_id": thread.ConversationID,
+					"tweets_count":    len(thread.Tweets),
+					"error":           err,
 				}).Error("Failed to handle reply")
 
-				// Check if error is rate limit related
 				if tr.isRateLimitError(err) {
 					log.Info("Rate limit reached, pausing processing")
-					time.Sleep(5 * time.Minute) // Add backoff when rate limit is hit
+					time.Sleep(5 * time.Minute)
 					continue
 				}
 			}
 
-			// Add small delay between successful tweets for safety
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
@@ -119,92 +118,49 @@ func (tr *TweetResponder) ProcessTweetsNeedingReply(ctx context.Context) error {
 	return nil
 }
 
-// ProcessTweetsInBatches processes tweets in controlled batches
-func (tr *TweetResponder) ProcessTweetsInBatches(ctx context.Context, config BatchProcessConfig) error {
-	log := tr.logger.WithField("method", "ProcessTweetsInBatches")
-
-	tweets, err := tr.tweetStore.RecallTweetsNeedingReply(ctx, tr.client)
-	if err != nil {
-		return fmt.Errorf("failed to recall tweets needing reply: %w", err)
-	}
-
-	totalTweets := len(tweets)
-	log.WithField("total_tweets", totalTweets).Info("Starting batch processing")
-
-	for i := 0; i < totalTweets; i += config.BatchSize {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			end := i + config.BatchSize
-			if end > totalTweets {
-				end = totalTweets
-			}
-
-			batch := tweets[i:end]
-			log.WithFields(logrus.Fields{
-				"batch_number": i/config.BatchSize + 1,
-				"batch_size":   len(batch),
-			}).Info("Processing batch")
-
-			for _, tweet := range batch {
-				if err := tr.processTweetWithRetry(ctx, tweet, config); err != nil {
-					log.WithError(err).WithField("tweet_id", tweet.TweetID).Error("Failed to process tweet after retries")
-				}
-			}
-
-			// Wait between batches
-			if end < totalTweets {
-				log.WithField("delay", config.BatchDelay).Info("Waiting between batches")
-				time.Sleep(config.BatchDelay)
-			}
-		}
-	}
-
-	return nil
-}
-
-// processTweetWithRetry attempts to process a tweet with retries
-func (tr *TweetResponder) processTweetWithRetry(ctx context.Context, tweet memory.TweetNeedingReply, config BatchProcessConfig) error {
-	var lastErr error
-
-	for attempt := 0; attempt < config.MaxRetries; attempt++ {
-		err := tr.limiter.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("rate limiter wait failed: %w", err)
-		}
-
-		if err := tr.handleSingleReply(ctx, tweet); err != nil {
-			lastErr = err
-			if tr.isRateLimitError(err) {
-				tr.logger.WithField("retry_delay", config.RetryDelay).Info("Rate limit hit, waiting before retry")
-				time.Sleep(config.RetryDelay)
-				continue
-			}
-		} else {
-			return nil
-		}
-
-		time.Sleep(config.RetryDelay)
-	}
-
-	return fmt.Errorf("failed after %d retries: %w", config.MaxRetries, lastErr)
-}
-
 // handleSingleReply processes a single tweet that needs a reply
-func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.TweetNeedingReply) error {
+func (tr *TweetResponder) handleSingleReply(ctx context.Context, thread memory.ConversationThread) error {
 	log := tr.logger.WithFields(logrus.Fields{
 		"method":          "handleSingleReply",
-		"tweet_id":        tweet.TweetID,
-		"conversation_id": tweet.ConversationID,
+		"conversation_id": thread.ConversationID,
+		"tweets_count":    len(thread.Tweets),
 	})
+
+	// Get the most recent tweet to reply to
+	lastTweet := thread.Tweets[len(thread.Tweets)-1]
+
+	// Build conversation context in a format suitable for LLM processing
+	var conversationContext strings.Builder
+	conversationContext.WriteString("Previous conversation:\n")
+	for i, tweet := range thread.Tweets {
+		// Skip the last tweet as it will be the main tweet we're responding to
+		if i == len(thread.Tweets)-1 {
+			continue
+		}
+		// Format: "@username (name): message"
+		conversationContext.WriteString(fmt.Sprintf("@%s (%s): %s\n",
+			tweet.AuthorUsername,
+			tweet.AuthorName,
+			tweet.Text,
+		))
+	}
+	conversationContext.WriteString("\nCurrent tweet to reply to:\n")
+	conversationContext.WriteString(fmt.Sprintf("@%s (%s): %s",
+		lastTweet.AuthorUsername,
+		lastTweet.AuthorName,
+		lastTweet.Text,
+	))
 
 	// Generate AI reply using the mention reply generator
 	config := thoughts.MentionReplyConfig{
-		TweetText:   tweet.Text,
-		MaxLength:   280, // Twitter's character limit
-		Temperature: 0.7, // Adjust temperature as needed
-		// Personality will use DefaultReplyPersonality by default
+		TweetText:           lastTweet.Text,               // The tweet we're directly replying to
+		ConversationContext: conversationContext.String(), // Full conversation history
+		MaxLength:           280,                          // Twitter's character limit
+		Temperature:         0.7,                          // Adjust as needed
+		AuthorUsername:      lastTweet.AuthorUsername,     // Who we're replying to
+		AuthorName:          lastTweet.AuthorName,         // Their display name
+		Category:            lastTweet.Category,           // Type of interaction
+		Language:            lastTweet.Lang,               // Tweet language
 	}
 
 	replyText, err := tr.replyGenerator.GenerateReply(ctx, config)
@@ -212,11 +168,11 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.Tw
 		return fmt.Errorf("failed to generate reply: %w", err)
 	}
 
-	// Post the reply
+	// Post the reply using existing PostReplyThread implementation
 	params := twitter.PostReplyThreadParams{
 		Text:           replyText,
-		ReplyToID:      tweet.TweetID,
-		ConversationID: tweet.ConversationID,
+		ReplyToID:      lastTweet.TweetID,
+		ConversationID: thread.ConversationID,
 	}
 
 	postedTweet, err := tr.client.PostReplyThread(ctx, params)
@@ -226,9 +182,55 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, tweet memory.Tw
 
 	log.WithFields(logrus.Fields{
 		"reply_tweet_id": postedTweet.ID,
-		"original_tweet": tweet.TweetID,
+		"reply_to_tweet": lastTweet.TweetID,
 		"reply_text":     replyText,
+		"context_length": len(thread.Tweets),
 	}).Info("Successfully posted reply")
+
+	return nil
+}
+
+// ProcessTweetsInBatches processes tweets in controlled batches
+func (tr *TweetResponder) ProcessTweetsInBatches(ctx context.Context, config BatchProcessConfig) error {
+	log := tr.logger.WithField("method", "ProcessTweetsInBatches")
+
+	threads, err := tr.tweetStore.RecallTweetsNeedingReply(ctx, tr.client)
+	if err != nil {
+		return fmt.Errorf("failed to recall tweets needing reply: %w", err)
+	}
+
+	totalThreads := len(threads)
+	log.WithField("total_threads", totalThreads).Info("Starting batch processing")
+
+	for i := 0; i < totalThreads; i += config.BatchSize {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			end := i + config.BatchSize
+			if end > totalThreads {
+				end = totalThreads
+			}
+
+			batch := threads[i:end]
+			log.WithFields(logrus.Fields{
+				"batch_number": i/config.BatchSize + 1,
+				"batch_size":   len(batch),
+			}).Info("Processing batch")
+
+			for _, thread := range batch {
+				if err := tr.handleSingleReply(ctx, thread); err != nil {
+					log.WithError(err).WithField("conversation_id", thread.ConversationID).
+						Error("Failed to process thread")
+				}
+			}
+
+			if end < totalThreads {
+				log.WithField("delay", config.BatchDelay).Info("Waiting between batches")
+				time.Sleep(config.BatchDelay)
+			}
+		}
+	}
 
 	return nil
 }

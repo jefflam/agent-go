@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/lisanmuaddib/agent-go/internal/agentconfig"
 	agent "github.com/lisanmuaddib/agent-go/pkg"
+	"github.com/lisanmuaddib/agent-go/pkg/db"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/lisanmuaddib/agent-go/pkg/llm/openai"
 	"github.com/lisanmuaddib/agent-go/pkg/logging"
@@ -43,7 +44,27 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize database connection
+	log.Info("Initializing database connection")
+	database, err := db.SetupDatabase(log)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to setup database connection")
+	}
+
+	// Get underlying *sql.DB to ensure clean shutdown
+	sqlDB, err := database.DB()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to get underlying database connection")
+	}
+	defer func() {
+		if err := sqlDB.Close(); err != nil {
+			log.WithError(err).Error("Error closing database connection")
+		}
+		log.Info("Database connection closed")
+	}()
+
 	// Initialize OpenAI client
+	log.Info("Initializing OpenAI client")
 	openaiConfig, err := openai.NewOpenAIConfig()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create OpenAI config")
@@ -55,6 +76,7 @@ func main() {
 	}
 
 	// Initialize Twitter config using the provided function
+	log.Info("Initializing Twitter client")
 	twitterConfig, err := twitter.NewTwitterConfig()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create Twitter config")
@@ -68,13 +90,15 @@ func main() {
 		log.WithError(err).Fatal("Failed to create Twitter client")
 	}
 
-	// Initialize TweetStore
-	tweetStore, err := memory.NewTweetStore(log)
+	// Initialize TweetStore with database
+	log.Info("Initializing TweetStore")
+	tweetStore, err := memory.NewTweetStore(log, database)
 	if err != nil {
-		log.Fatalf("Failed to initialize tweet store: %v", err)
+		log.WithError(err).Fatal("Failed to initialize tweet store")
 	}
 
 	// Initialize agent
+	log.Info("Initializing agent")
 	agent, err := agent.New(agent.Config{
 		LLM:           llmClient.GetLLM(),
 		TwitterClient: twitterClient,
@@ -84,6 +108,8 @@ func main() {
 		log.WithError(err).Fatal("Failed to create agent")
 	}
 
+	// Configure and register actions
+	log.Info("Configuring agent actions")
 	actions, err := agentconfig.ConfigureActions(agentconfig.ActionConfig{
 		TwitterClient: twitterClient,
 		LLM:           llmClient.GetLLM(),
@@ -100,13 +126,22 @@ func main() {
 		}
 	}
 
-	// Handle graceful shutdown
+	// Setup graceful shutdown
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
 		log.Info("Received shutdown signal")
-		cancel()
+
+		// Begin graceful shutdown
+		log.Info("Starting graceful shutdown")
+
+		// Close database connection gracefully
+		if err := sqlDB.Close(); err != nil {
+			log.WithError(err).Error("Error closing database connection during shutdown")
+		}
+
+		cancel() // Cancel context to stop all operations
 	}()
 
 	log.Info("Starting Twitter mention monitoring")
