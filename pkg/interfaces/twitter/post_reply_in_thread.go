@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/sirupsen/logrus"
 )
@@ -44,6 +45,16 @@ func (c *TwitterClient) PostReplyThread(ctx context.Context, params PostReplyThr
 		}
 	}
 
+	// Add validation before creating request
+	if params.ReplyToID == "" {
+		return nil, fmt.Errorf("reply_to_id is required for posting a reply")
+	}
+
+	// Validate tweet ID format (1-19 digits)
+	if !regexp.MustCompile(`^[0-9]{1,19}$`).MatchString(params.ReplyToID) {
+		return nil, fmt.Errorf("invalid reply_to_id format: must be 1-19 digits")
+	}
+
 	// Create the reply with thread information
 	opts := &BaseOptions{
 		ReplyOptions: &ReplyOptions{
@@ -53,8 +64,10 @@ func (c *TwitterClient) PostReplyThread(ctx context.Context, params PostReplyThr
 
 	// Log the request body before sending
 	requestBody := map[string]interface{}{
-		"text":  params.Text,
-		"reply": opts.ReplyOptions,
+		"text": params.Text,
+		"reply": map[string]interface{}{
+			"in_reply_to_tweet_id": params.ReplyToID,
+		},
 	}
 
 	requestJSON, err := json.MarshalIndent(requestBody, "", "  ")
@@ -69,7 +82,9 @@ func (c *TwitterClient) PostReplyThread(ctx context.Context, params PostReplyThr
 
 	tweet, err := c.PostTweet(ctx, params.Text, opts)
 	if err != nil {
-		log.WithError(err).Error("failed to post reply tweet in thread")
+		log.WithFields(logrus.Fields{
+			"request_body": string(requestJSON),
+		}).WithError(err).Error("failed to post reply tweet in thread")
 		return nil, fmt.Errorf("failed to post reply tweet in thread: %w", err)
 	}
 

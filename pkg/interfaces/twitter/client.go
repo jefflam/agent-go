@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,51 @@ func (c *TwitterClient) handleResponse(resp *http.Response) error {
 	return fmt.Errorf("twitter api error: status=%d", resp.StatusCode)
 }
 
+func (c *TwitterClient) handleRateLimits(resp *http.Response) error {
+	// Only handle 429 responses
+	if resp.StatusCode != http.StatusTooManyRequests {
+		return nil
+	}
+
+	// Log all relevant rate limit headers
+	c.logger.WithFields(logrus.Fields{
+		"endpoint":                      resp.Request.URL.Path,
+		"x_rate_limit_limit":            resp.Header.Get("x-rate-limit-limit"),
+		"x_rate_limit_remaining":        resp.Header.Get("x-rate-limit-remaining"),
+		"x_rate_limit_reset":            resp.Header.Get("x-rate-limit-reset"),
+		"x_user_limit_24hour":           resp.Header.Get("x-user-limit-24hour"),
+		"x_user_limit_24hour_remaining": resp.Header.Get("x-user-limit-24hour-remaining"),
+		"x_user_limit_24hour_reset":     resp.Header.Get("x-user-limit-24hour-reset"),
+	}).Debug("Rate limit headers received")
+
+	// Get endpoint-specific and daily limits
+	endpointRemaining := parseIntHeader(resp.Header.Get("x-rate-limit-remaining"))
+	endpointReset := parseInt64Header(resp.Header.Get("x-rate-limit-reset"))
+	dailyRemaining := parseIntHeader(resp.Header.Get("x-user-limit-24hour-remaining"))
+	dailyReset := parseInt64Header(resp.Header.Get("x-user-limit-24hour-reset"))
+
+	// Use the more restrictive reset time
+	var resetTime time.Time
+	if endpointReset > dailyReset {
+		resetTime = time.Unix(endpointReset, 0)
+	} else {
+		resetTime = time.Unix(dailyReset, 0)
+	}
+
+	waitDuration := time.Until(resetTime)
+
+	c.logger.WithFields(logrus.Fields{
+		"endpoint_remaining": endpointRemaining,
+		"daily_remaining":    dailyRemaining,
+		"reset_time":         resetTime.Format(time.RFC3339),
+		"wait_duration":      waitDuration.Round(time.Second),
+	}).Warning("Rate limit exceeded")
+
+	return fmt.Errorf("rate limit exceeded, reset in %v at %v",
+		waitDuration.Round(time.Second),
+		resetTime.Format(time.RFC3339))
+}
+
 func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
 	c.logger.WithFields(logrus.Fields{
 		"method":   method,
@@ -140,6 +186,21 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 	if err != nil {
 		c.logger.WithError(err).Error("Request failed")
 		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	// Log rate limit headers
+	c.logger.WithFields(logrus.Fields{
+		"endpoint":               endpoint,
+		"x-rate-limit-limit":     resp.Header.Get("x-rate-limit-limit"),
+		"x-rate-limit-remaining": resp.Header.Get("x-rate-limit-remaining"),
+		"x-rate-limit-reset":     resp.Header.Get("x-rate-limit-reset"),
+	}).Debug("Rate limit headers")
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		if err := c.handleRateLimits(resp); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
 	}
 
 	// Add error handling here
@@ -193,6 +254,13 @@ func (c *TwitterClient) makeRequestWithParams(ctx context.Context, method, endpo
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		if err := c.handleRateLimits(resp); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -200,4 +268,21 @@ func (c *TwitterClient) makeRequestWithParams(ctx context.Context, method, endpo
 	}
 
 	return resp, nil
+}
+
+// Helper functions to parse headers
+func parseIntHeader(value string) int {
+	if value == "" {
+		return 0
+	}
+	i, _ := strconv.Atoi(value)
+	return i
+}
+
+func parseInt64Header(value string) int64 {
+	if value == "" {
+		return 0
+	}
+	i, _ := strconv.ParseInt(value, 10, 64)
+	return i
 }

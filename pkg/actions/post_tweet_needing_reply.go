@@ -3,6 +3,8 @@ package actions
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -126,30 +128,71 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, thread memory.C
 		"tweets_count":    len(thread.Tweets),
 	})
 
-	// Get the most recent tweet to reply to
-	lastTweet := thread.Tweets[len(thread.Tweets)-1]
+	// Sort tweets by creation time to ensure proper order
+	sort.Slice(thread.Tweets, func(i, j int) bool {
+		return thread.Tweets[i].CreatedAt.Before(thread.Tweets[j].CreatedAt)
+	})
 
-	// Build conversation context in a format suitable for LLM processing
+	// Find the latest tweet we should reply to
+	var lastTweet memory.TweetNeedingReply
+	var found bool
+	for i := len(thread.Tweets) - 1; i >= 0; i-- {
+		tweet := thread.Tweets[i]
+		botID := os.Getenv("TWITTER_USER_ID")
+
+		log := tr.logger.WithFields(logrus.Fields{
+			"method":         "handleSingleReply",
+			"bot_id":         botID,
+			"tweet_id":       tweet.TweetID,
+			"tweet_author":   tweet.AuthorID,
+			"category":       tweet.Category,
+			"replied_to":     tweet.RepliedTo,
+			"unread_replies": tweet.UnreadReplies,
+		})
+
+		if botID == "" {
+			log.Error("TWITTER_USER_ID environment variable not set")
+			return fmt.Errorf("TWITTER_USER_ID environment variable not set")
+		}
+
+		log.Debug("Checking tweet for reply eligibility")
+
+		// Check if this tweet needs a reply
+		if tweet.AuthorID != botID && // Not our own tweet
+			((tweet.Category == "mention" && !tweet.RepliedTo) || // New mention
+				(tweet.Category == "conversation" && !tweet.RepliedTo) || // New conversation tweet
+				tweet.UnreadReplies > 0) { // Has unread replies
+
+			log.Info("Found tweet needing reply")
+			lastTweet = tweet
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		log.WithField("tweets", thread.Tweets).Debug("No suitable tweet found to reply to")
+		return fmt.Errorf("no suitable tweet found to reply to in thread")
+	}
+
+	// Validate tweet ID
+	if lastTweet.TweetID == "" {
+		log.Error("Tweet ID is empty")
+		return fmt.Errorf("invalid tweet_id: empty string")
+	}
+
+	// Build conversation context only from tweets before this one
 	var conversationContext strings.Builder
 	conversationContext.WriteString("Previous conversation:\n")
-	for i, tweet := range thread.Tweets {
-		// Skip the last tweet as it will be the main tweet we're responding to
-		if i == len(thread.Tweets)-1 {
-			continue
+	for _, tweet := range thread.Tweets {
+		if tweet.CreatedAt.Before(lastTweet.CreatedAt) {
+			conversationContext.WriteString(fmt.Sprintf("@%s (%s): %s\n",
+				tweet.AuthorUsername,
+				tweet.AuthorName,
+				tweet.Text,
+			))
 		}
-		// Format: "@username (name): message"
-		conversationContext.WriteString(fmt.Sprintf("@%s (%s): %s\n",
-			tweet.AuthorUsername,
-			tweet.AuthorName,
-			tweet.Text,
-		))
 	}
-	conversationContext.WriteString("\nCurrent tweet to reply to:\n")
-	conversationContext.WriteString(fmt.Sprintf("@%s (%s): %s",
-		lastTweet.AuthorUsername,
-		lastTweet.AuthorName,
-		lastTweet.Text,
-	))
 
 	// Generate AI reply using the mention reply generator
 	config := thoughts.MentionReplyConfig{
@@ -175,9 +218,35 @@ func (tr *TweetResponder) handleSingleReply(ctx context.Context, thread memory.C
 		ConversationID: thread.ConversationID,
 	}
 
+	// Add debug logging
+	log.WithFields(logrus.Fields{
+		"reply_to_id":     params.ReplyToID,
+		"conversation_id": params.ConversationID,
+		"text_length":     len(params.Text),
+	}).Debug("Preparing to post reply")
+
 	postedTweet, err := tr.client.PostReplyThread(ctx, params)
 	if err != nil {
+		log.WithFields(logrus.Fields{
+			"error":           err,
+			"reply_to_id":     params.ReplyToID,
+			"conversation_id": params.ConversationID,
+		}).Error("Failed to post reply tweet")
 		return fmt.Errorf("failed to post reply: %w", err)
+	}
+
+	// Add error handling for SaveAgentReply
+	if postedTweet != nil {
+		if err := tr.tweetStore.SaveAgentReply(lastTweet.TweetID, postedTweet.ID, thread.ConversationID, replyText); err != nil {
+			log.WithError(err).Error("Failed to save agent reply to database")
+			// Don't return error as the tweet was still posted successfully
+		}
+	}
+
+	// Update the original tweet's status
+	if err := tr.tweetStore.UpdateTweetAfterReply(lastTweet.TweetID, postedTweet.ID); err != nil {
+		log.WithError(err).Error("Failed to update tweet status after reply")
+		// Don't return error as the tweet was still posted successfully
 	}
 
 	log.WithFields(logrus.Fields{

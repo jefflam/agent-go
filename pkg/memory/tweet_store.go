@@ -1,10 +1,12 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -23,6 +25,12 @@ const (
 	CategoryConversation TweetCategory = "conversation"
 )
 
+// Add constants for bot details at package level
+const (
+	AgentUsername = "CatLordLaffy"
+	AgentName     = "CatLordLaffy"
+)
+
 // StoredTweet extends the twitter.Tweet with processing metadata
 type StoredTweet struct {
 	twitter.Tweet                    // Embeds all standard Tweet fields (includes AuthorID, metrics, etc)
@@ -33,6 +41,11 @@ type StoredTweet struct {
 	ConversationRef *ConversationRef `json:"conversation_ref" gorm:"column:conversation_ref;type:jsonb"`
 	AuthorName      string           `json:"author_name" gorm:"column:author_name"`
 	AuthorUsername  string           `json:"author_username" gorm:"column:author_username"`
+}
+
+// TableName specifies the table name for GORM
+func (StoredTweet) TableName() string {
+	return "tweets"
 }
 
 // ConversationRef holds metadata about the tweet's place in a conversation
@@ -52,12 +65,16 @@ type TweetStore struct {
 	mu     sync.RWMutex
 	logger *logrus.Logger
 	db     *gorm.DB
+	botID  string
+	env    EnvConfig
 }
 
-func NewTweetStore(logger *logrus.Logger, db *gorm.DB) (*TweetStore, error) {
+func NewTweetStore(logger *logrus.Logger, db *gorm.DB, botID string, env EnvConfig) (*TweetStore, error) {
 	return &TweetStore{
 		logger: logger,
 		db:     db,
+		botID:  botID,
+		env:    env,
 	}, nil
 }
 
@@ -76,6 +93,15 @@ func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory, auth
 	}).Debug("Attempting to save tweet")
 
 	now := time.Now()
+
+	// Check if we're already participating in this conversation
+	var participatingCount int64
+	if tweet.ConversationID != "" {
+		s.db.Table("tweets").
+			Where("conversation_id = ? AND is_participating = ?",
+				tweet.ConversationID, true).
+			Count(&participatingCount)
+	}
 
 	// Prepare conversation ref if exists
 	var conversationRef *ConversationRef
@@ -109,44 +135,88 @@ func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory, auth
 		}
 	}
 
-	// Convert to database model
-	storedTweet := StoredTweet{
-		Tweet:           tweet,
-		Category:        category,
-		ProcessedAt:     now,
-		LastUpdated:     now,
-		AuthorName:      authorName,
-		AuthorUsername:  authorUsername,
-		ConversationRef: conversationRef,
+	// Prepare base tweet data
+	tweetData := map[string]interface{}{
+		"id":                  tweet.ID,
+		"text":                tweet.Text,
+		"conversation_id":     tweet.ConversationID,
+		"author_id":           tweet.AuthorID,
+		"author_name":         authorName,
+		"author_username":     authorUsername,
+		"category":            category,
+		"processed_at":        now,
+		"last_updated":        now,
+		"conversation_ref":    conversationRef,
+		"attachments":         tweet.Attachments,
+		"context_annotations": tweet.ContextAnnotations,
+		"edit_controls":       tweet.EditControls,
+		"entities":            tweet.Entities,
+		"geo":                 tweet.Geo,
+		"lang":                tweet.Lang,
+		"possibly_sensitive":  tweet.PossiblySensitive,
+		"public_metrics":      tweet.PublicMetrics,
+		"referenced_tweets":   tweet.ReferencedTweets,
+		"reply_settings":      tweet.ReplySettings,
+		"source":              tweet.Source,
+		"withheld":            tweet.Withheld,
+		"needs_reply":         true,
+		"is_participating":    participatingCount > 0,
 	}
 
-	// Upsert the tweet
-	result := s.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"text",
-			"conversation_id",
-			"author_name",
-			"author_username",
-			"category",
-			"last_updated",
-			"conversation_ref",
-			"process_count",
-			"attachments",
-			"context_annotations",
-			"edit_controls",
-			"edit_history_tweet_ids",
-			"entities",
-			"geo",
-			"lang",
-			"possibly_sensitive",
-			"public_metrics",
-			"referenced_tweets",
-			"reply_settings",
-			"source",
-			"withheld",
-		}),
-	}).Create(&storedTweet)
+	// Handle replies specifically
+	if tweet.ConversationID != "" && tweet.ReferencedTweets != nil {
+		for _, ref := range tweet.ReferencedTweets {
+			if ref.Type == "replied_to" {
+				s.logger.WithFields(logrus.Fields{
+					"tweet_id":        tweet.ID,
+					"parent_id":       ref.ID,
+					"conversation_id": tweet.ConversationID,
+				}).Debug("Processing new reply in conversation")
+
+				// Update parent tweet
+				updateResult := s.db.Table("tweets").
+					Where("id = ?", ref.ID).
+					Updates(map[string]interface{}{
+						"unread_replies": gorm.Expr("unread_replies + 1"),
+						"needs_reply":    true,
+						"last_updated":   now,
+					})
+
+				if updateResult.Error != nil {
+					s.logger.WithError(updateResult.Error).Error("Failed to update parent tweet")
+				}
+
+				// Update all tweets in conversation
+				s.db.Table("tweets").
+					Where("conversation_id = ? AND id != ?",
+						tweet.ConversationID, ref.ID).
+					Updates(map[string]interface{}{
+						"is_participating": true,
+						"last_updated":     now,
+					})
+				break
+			}
+		}
+	}
+
+	// Handle edit_history_tweet_ids as a proper array
+	if tweet.EditHistoryTweetIDs != nil {
+		var historyIDs pq.StringArray
+		if len(tweet.EditHistoryTweetIDs) == 0 {
+			historyIDs = pq.StringArray{tweet.ID}
+		} else {
+			historyIDs = pq.StringArray(tweet.EditHistoryTweetIDs)
+		}
+		tweetData["edit_history_tweet_ids"] = historyIDs
+	}
+
+	// Perform upsert operation
+	result := s.db.Table("tweets").
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.Assignments(tweetData),
+		}).
+		Create(tweetData)
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to save tweet: %w", result.Error)
@@ -158,11 +228,82 @@ func (s *TweetStore) SaveTweet(tweet twitter.Tweet, category TweetCategory, auth
 		"category":          category,
 		"public_metrics":    tweet.PublicMetrics,
 		"referenced_tweets": tweet.ReferencedTweets,
-		"author_name":       storedTweet.AuthorName,
-		"author_username":   storedTweet.AuthorUsername,
+		"author_name":       authorName,
+		"author_username":   authorUsername,
 	}).Info("Successfully saved tweet to database")
 
 	return nil
+}
+
+// SaveAgentReply stores our own replies in the database
+func (s *TweetStore) SaveAgentReply(originalTweetID, replyTweetID, conversationID string, replyText string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+
+	// Save our reply with ALL required fields
+	tweetData := map[string]interface{}{
+		// Required fields
+		"processed_at":   now,
+		"process_count":  0,
+		"needs_reply":    false, // Our own tweets never need replies
+		"unread_replies": 0,
+		"reply_count":    0,
+
+		// Existing fields
+		"id":               replyTweetID,
+		"text":             replyText,
+		"conversation_id":  conversationID,
+		"created_at":       now,
+		"category":         CategoryReply,
+		"is_participating": true,
+		"replied_to":       false,
+		"last_updated":     now,
+		"author_id":        s.botID,
+		"author_name":      AgentName,
+		"author_username":  AgentUsername,
+		"conversation_ref": &ConversationRef{
+			ConversationID: conversationID,
+			ParentID:       originalTweetID,
+			IsRoot:         false,
+			LastReplyAt:    now,
+		},
+	}
+
+	// Start a transaction
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// Save the reply tweet
+		if err := tx.Table("tweets").Create(tweetData).Error; err != nil {
+			return fmt.Errorf("failed to save agent reply: %w", err)
+		}
+
+		// Update the original tweet status
+		if err := tx.Table("tweets").
+			Where("id = ?", originalTweetID).
+			Updates(map[string]interface{}{
+				"replied_to":       true,
+				"needs_reply":      false,
+				"last_reply_id":    replyTweetID,
+				"last_reply_time":  now,
+				"last_updated":     now,
+				"is_participating": true,
+			}).Error; err != nil {
+			return fmt.Errorf("failed to update original tweet: %w", err)
+		}
+
+		// Update all tweets in the conversation
+		if err := tx.Table("tweets").
+			Where("conversation_id = ?", conversationID).
+			Updates(map[string]interface{}{
+				"is_participating": true,
+				"last_updated":     now,
+			}).Error; err != nil {
+			return fmt.Errorf("failed to update conversation tweets: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func (s *TweetStore) GetTweet(id string) (*StoredTweet, error) {
@@ -217,4 +358,43 @@ func DetermineTweetCategory(tweet twitter.Tweet) TweetCategory {
 		}
 	}
 	return CategoryMention
+}
+
+// UpdateTweetAfterReply updates the tweet status after we've posted a reply
+func (s *TweetStore) UpdateTweetAfterReply(tweetID string, replyTweetID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+
+	result := s.db.Table("tweets").
+		Where("id = ?", tweetID).
+		Updates(map[string]interface{}{
+			"replied_to":       true,
+			"needs_reply":      false,
+			"last_reply_id":    replyTweetID,
+			"last_reply_time":  now,
+			"last_updated":     now,
+			"is_participating": true,
+		})
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update tweet after reply: %w", result.Error)
+	}
+
+	s.logger.WithFields(logrus.Fields{
+		"tweet_id":   tweetID,
+		"reply_id":   replyTweetID,
+		"updated_at": now,
+	}).Debug("Updated tweet status after posting reply")
+
+	return nil
+}
+
+// Add this method to your TweetStore struct
+func (ts *TweetStore) UpdateBotID(ctx context.Context, botID string) error {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.botID = botID
+	return nil
 }

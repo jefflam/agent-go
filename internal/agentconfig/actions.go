@@ -12,6 +12,21 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+// Action timing constants define intervals for various agent activities
+const (
+	// MentionsCheckInterval is how often the agent checks for new mentions
+	// Example: MentionsCheckInterval = 2 * time.Minute
+	MentionsCheckInterval = 120 * time.Second
+
+	// OriginalThoughtInterval is how often the agent generates and posts original thoughts
+	// Example: OriginalThoughtInterval = 30 * time.Minute
+	OriginalThoughtInterval = 30 * time.Minute
+
+	// TweetResponseInterval is how often the agent processes and responds to pending tweets
+	// Example: TweetResponseInterval = 5 * time.Minute
+	TweetResponseInterval = 15 * time.Second
+)
+
 type ActionConfig struct {
 	TwitterClient *twitter.TwitterClient
 	LLM           llms.Model
@@ -27,7 +42,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.Logger,
 		config.TweetStore,
 		actions.MentionsOptions{
-			Interval:   2 * time.Minute,
+			Interval:   MentionsCheckInterval,
 			MaxResults: 100,
 		},
 	)
@@ -40,7 +55,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		config.TwitterClient,
 		config.Logger,
 		actions.ThoughtOptions{
-			Interval: 30 * time.Minute,
+			Interval: OriginalThoughtInterval,
 		},
 	)
 
@@ -57,7 +72,7 @@ func ConfigureActions(config ActionConfig) ([]actions.Action, error) {
 		tweetResponder,
 		config.Logger,
 		actions.TweetResponseOptions{
-			Interval:    5 * time.Minute,
+			Interval:    TweetResponseInterval,
 			BatchConfig: actions.DefaultBatchConfig(),
 		},
 	)

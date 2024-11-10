@@ -57,7 +57,7 @@ func (g *DefaultMentionReplyGenerator) GenerateReply(ctx context.Context, config
 
 	replyPrompt := langchainprompts.NewPromptTemplate(
 		promptTemplate,
-		[]string{"personality", "tweet", "maxLength", "context", "authorUsername", "authorName", "category", "language"},
+		[]string{"personality", "tweet", "maxLength", "context", "authorUsername", "authorName", "category"},
 	)
 
 	// Format personality traits into a string
@@ -83,9 +83,6 @@ func (g *DefaultMentionReplyGenerator) GenerateReply(ctx context.Context, config
 	}
 	if config.Category != "" {
 		promptData["category"] = config.Category
-	}
-	if config.Language != "" {
-		promptData["language"] = config.Language
 	}
 
 	formattedPrompt, err := replyPrompt.Format(promptData)
@@ -130,7 +127,6 @@ CONVERSATION CONTEXT:
 Tweet to respond to: {{.tweet}}
 {{if .authorUsername}}From: @{{.authorUsername}}{{if .authorName}} ({{.authorName}}){{end}}{{end}}
 {{if .category}}Interaction type: {{.category}}{{end}}
-{{if .language}}Language: {{.language}}{{end}}
 
 Requirements:
 1. Your reply MUST be under {{.maxLength}} characters
@@ -139,6 +135,5 @@ Requirements:
 4. Consider the full conversation context
 5. Maintain conversation flow
 6. Use appropriate emojis when relevant
-{{if .language}}7. Respond in the specified language{{end}}
 
 Your reply:`

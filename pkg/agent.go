@@ -7,6 +7,7 @@ import (
 
 	"github.com/lisanmuaddib/agent-go/pkg/actions"
 	"github.com/lisanmuaddib/agent-go/pkg/interfaces/twitter"
+	"github.com/lisanmuaddib/agent-go/pkg/memory"
 	"github.com/sirupsen/logrus"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	LLM           llms.Model
 	Logger        *logrus.Logger
 	TwitterClient *twitter.TwitterClient
+	TweetStore    *memory.TweetStore
 }
 
 func New(config Config) (*Agent, error) {

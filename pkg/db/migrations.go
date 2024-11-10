@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,6 +30,7 @@ func RunMigrations(logger *logrus.Logger, projectRoot string) error {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	logger.Info("Database migrations completed successfully")
 	return nil
 }
 
@@ -50,7 +53,7 @@ func MigrationStatus(logger *logrus.Logger) (uint, bool, error) {
 	defer m.Close()
 
 	version, dirty, err := m.Version()
-	if err != nil {
+	if err != nil && err != migrate.ErrNilVersion {
 		return 0, false, fmt.Errorf("failed to get migration version: %w", err)
 	}
 

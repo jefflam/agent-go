@@ -16,6 +16,7 @@ type TwitterConfig struct {
 	AccessToken       string
 	AccessTokenSecret string
 	BearerToken       string
+	UserID            string
 
 	// API Endpoints
 	BaseURL          string
@@ -51,6 +52,8 @@ func NewTwitterConfig() (*TwitterConfig, error) {
 	rateWindow, _ := strconv.Atoi(getEnvOrDefault("TWITTER_RATE_WINDOW", "15"))
 	retryAttempts, _ := strconv.Atoi(getEnvOrDefault("TWITTER_RETRY_ATTEMPTS", "3"))
 
+	userID := os.Getenv("TWITTER_USER_ID")
+
 	config := &TwitterConfig{
 		// API Authentication
 		ConsumerKey:       os.Getenv("TWITTER_CONSUMER_KEY"),
@@ -58,6 +61,7 @@ func NewTwitterConfig() (*TwitterConfig, error) {
 		AccessToken:       os.Getenv("TWITTER_ACCESS_TOKEN"),
 		AccessTokenSecret: os.Getenv("TWITTER_ACCESS_TOKEN_SECRET"),
 		BearerToken:       os.Getenv("TWITTER_BEARER_TOKEN"),
+		UserID:            userID,
 
 		// API Endpoints
 		BaseURL:          getEnvOrDefault("TWITTER_API_BASE_URL", "https://api.twitter.com/2"),

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -64,14 +65,18 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 		defer close(dataChan)
 		defer close(errChan)
 
-		// Get authenticated user ID if not provided
+		// Get user ID from environment if not provided
 		if params.UserID == "" {
-			authUserID, err := c.GetAuthenticatedUserID(ctx)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to get authenticated user ID: %w", err)
+			envUserID := os.Getenv("TWITTER_USER_ID")
+			if envUserID == "" {
+				errChan <- fmt.Errorf("TWITTER_USER_ID environment variable not set")
 				return
 			}
-			params.UserID = authUserID
+			params.UserID = envUserID
+			c.logger.WithFields(logrus.Fields{
+				"source":  "env",
+				"user_id": envUserID,
+			}).Debug("Using configured Twitter user ID from environment")
 		}
 
 		// Validate MaxResults
@@ -133,10 +138,24 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 		endpoint := fmt.Sprintf("/users/%s/mentions", params.UserID)
 		resp, err := c.makeRequestWithParams(ctx, "GET", endpoint, queryParams)
 		if err != nil {
+			if strings.Contains(err.Error(), "rate limit exceeded") {
+				c.logger.WithFields(logrus.Fields{
+					"endpoint": endpoint,
+					"error":    err.Error(),
+					"params":   queryParams,
+				}).Error("Mentions endpoint rate limit exceeded")
+			}
 			errChan <- fmt.Errorf("failed to make request: %w", err)
 			return
 		}
 		defer resp.Body.Close()
+
+		c.logger.WithFields(logrus.Fields{
+			"endpoint":           endpoint,
+			"remaining_requests": resp.Header.Get("x-rate-limit-remaining"),
+			"daily_remaining":    resp.Header.Get("x-user-limit-24hour-remaining"),
+			"status":             resp.StatusCode,
+		}).Debug("Mentions request completed")
 
 		var mentionResp MentionResponse
 		if err := json.NewDecoder(resp.Body).Decode(&mentionResp); err != nil {
@@ -150,22 +169,17 @@ func (c *TwitterClient) GetUserMentions(ctx context.Context, params GetUserMenti
 	return dataChan, errChan
 }
 
-// GetAuthenticatedUserID retrieves the authenticated user's ID
+// GetAuthenticatedUserID retrieves the authenticated user's ID from environment
 func (c *TwitterClient) GetAuthenticatedUserID(ctx context.Context) (string, error) {
-	endpoint := "/users/me"
-	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return "", err
+	userID := os.Getenv("TWITTER_USER_ID")
+	if userID == "" {
+		return "", fmt.Errorf("TWITTER_USER_ID environment variable not set")
 	}
-	defer resp.Body.Close()
 
-	var userResp struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
-		return "", err
-	}
-	return userResp.Data.ID, nil
+	c.logger.WithFields(logrus.Fields{
+		"source":  "env",
+		"user_id": userID,
+	}).Debug("Using configured Twitter user ID from environment")
+
+	return userID, nil
 }
